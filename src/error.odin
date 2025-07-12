@@ -21,6 +21,7 @@ Error :: union #shared_nil {
 	StackError,
 	MemoryError,
 	VMError,
+	TokeniserError,
 }
 
 StackError :: enum {
@@ -48,11 +49,25 @@ MemoryError :: enum {
 VMError :: enum {
 	
 	None,
+	
 	No_VM,			// No VM given
 	Unknown_Type,	// Type doesn't exist
 	Type_Overwrite, // Type already exists
 	Unknown_Member, // Can't get the member from Array or Struct
 	Bounds_Check,	// Bounds overflow in Array or Struct
+	
+	Text_Mismatch,	// Mismatch with text length and tokenisation count
+	Text_Invalid,	// Unable to get substring from text
+	Token_Mismatch, // Mismatch with token amount and parse count
+}
+
+TokeniserError :: enum {
+	
+	None,
+	
+	Empty_String,		// Given string is empty
+	Invalid_String, 	// Given string isn't valid utf8
+	No_Destination, 	// No tokenisation destination specified
 }
 
 

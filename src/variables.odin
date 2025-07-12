@@ -135,12 +135,23 @@ variable_push :: proc(
 ) -> (err : Error) {
 	if vm == nil do return .No_VM
 	
+	sp, stack_err := get_stack_ptr(vm.stack)
+	if stack_err != nil do return stack_err
 	variable := Variable {
 		type = type,
 		mutable = mut,
 	}
 	
 	type, type_err := get_type(vm, type)
+	val_ptr, push_err := stack_push(
+		vm.stack, nil,
+		type.size, type.align
+	);	if push_err != nil do return push_err
+	
+	variable.ptr = val_ptr
+	variable.bef = sp
+	
+	append(&vm.variables, variable)
 	
 	return
 }

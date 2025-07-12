@@ -16,5 +16,5 @@ get_global_ptr :: proc(vm : VM, ptr : uintptr) -> uintptr {
 	//		 calculate pointers in relation
 	//		 to that :)
 	
-	return ptr
+	return uintptr(vm.data) + ptr
 }
