@@ -1,0 +1,67 @@
+/* --- Example ---
+ * ho, ho, ho,
+ * holang example!
+ *
+ * this should be a valid holang file
+ */
+
+
+// --- Types ---
+#type PlayerData struct {
+	
+	a : int,
+	b : int,
+}
+
+#type Player struct {
+	
+	
+}
+
+// You can only define "compile" time constants
+// That are one of the base types in value
+#const Skibidi 1
+
+// --- Variables ---
+var player : Player
+// Boo! A global variable
+// Scary, and also zero initialized
+
+
+// --- Functions ---
+
+// A main function, yay!
+fn main(a : int, b : int) {
+	
+	
+	var i : int
+	var f : float
+	
+	i, f = skibidi(a)
+	
+	print(i, f, a, b)
+}
+
+
+// This supports multiple return values
+// Or none at all...
+fn skibidi(a : int) -> (int, float) {
+	b = a * 10
+	
+	return 
+}
+
+var i :: int // Immutable
+var b  : int // Mutable
+
+
+// This is also a valid function
+fn do_a_thing {
+	
+	var a : int
+	var b : float
+}
+
+// Let's call it
+do_a_thing()
+
