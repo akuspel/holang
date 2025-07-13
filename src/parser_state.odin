@@ -6,6 +6,7 @@ package holang
  */
 
 import "core:fmt"
+import "core:mem"
 import "core:strings"
 
 // --- Procedures ---
@@ -109,6 +110,25 @@ solve_state :: proc(vm : VM, text : string, state : ^ParserState) -> (err : Erro
 			}
 		}
 	
+	case SquareState:
+		
+		// Get variant from value
+		value_token, token_err := get_token(vm, b.value_token)
+		if token_err != nil do return token_err
+		
+		value := value_token.value
+		
+		(state.parent != nil) or_break
+		
+		#partial switch &parent_body in state.parent.body {
+		case TypeState:
+			
+			// Create array base
+			parent_body.type_body = ArrayBody {
+				size = value.(int) or_else 0
+			}
+		}
+	
 	case TypeState:
 		
 		// Finalize type
@@ -131,9 +151,7 @@ solve_state :: proc(vm : VM, text : string, state : ^ParserState) -> (err : Erro
 				type, type_err := get_type(vm, m.base_type)
 				if type_err != nil do return type_err
 				
-				offset := i
-				diff := i %% type.align
-				if diff != 0 do offset += type.size - diff
+				offset := mem.align_forward_int(i, type.align)
 				m.offset = uintptr(offset)
 				
 				i = offset + type.size
@@ -149,7 +167,64 @@ solve_state :: proc(vm : VM, text : string, state : ^ParserState) -> (err : Erro
 			
 			t.members = b.members[:]
 		
-		case:
+		case ArrayBody:
+			
+			// --- Figure Out Base Type ---
+			base_type_token, token_err := get_token(vm, b.base_type_token)
+			if token_err != nil do return token_err
+			
+			base_type_name := strings.substring(text, base_type_token.start, base_type_token.end) or_else ""
+			type_id, id_err := get_type_id_by_name(vm, base_type_name)
+			if id_err != nil do return id_err
+			
+			base_type, type_err := get_type(vm, type_id)
+			if type_err != nil do return type_err
+			
+			// Assign values
+			t.base_type = type_id
+			t.align = base_type.align
+			
+			// Error when defining array size
+			if t.size <= 0 do return .Invalid_Array_Size
+			
+			new_type.size  = t.size * mem.align_forward_int(
+				base_type.size, t.align)
+			new_type.align = t.align
+		
+		case PointerBody:
+			
+			// --- Figure Out Base Type ---
+			base_type_token, token_err := get_token(vm, b.base_type_token)
+			if token_err != nil do return token_err
+			
+			base_type_name := strings.substring(text, base_type_token.start, base_type_token.end) or_else ""
+			type_id, id_err := get_type_id_by_name(vm, base_type_name)
+			if id_err != nil do return id_err
+			
+			// Assign values
+			t.base_type = type_id
+			
+			new_type.size  = 8
+			new_type.align = 8
+		
+		case ReferenceBody:
+			
+			// --- Figure Out Base Type ---
+			base_type_token, token_err := get_token(vm, b.base_type_token)
+			if token_err != nil do return token_err
+			
+			base_type_name := strings.substring(text, base_type_token.start, base_type_token.end) or_else ""
+			type_id, id_err := get_type_id_by_name(vm, base_type_name)
+			if id_err != nil do return id_err
+			
+			base_type, type_err := get_type(vm, type_id)
+			if type_err != nil do return type_err
+			
+			// Assign values
+			t.base_type = type_id
+			
+			new_type.size  = base_type.size
+			new_type.align = base_type.align
 		}
 		
 		new_type.body = b.type_body

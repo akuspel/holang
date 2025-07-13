@@ -49,11 +49,12 @@ Type :: struct {
 TypeBody :: union {
 	
 	ByteBody,
-	StructBody,
-	ArrayBody,
 	IntBody,
 	FloatBody,
 	BoolBody,
+	
+	StructBody,
+	ArrayBody,
 	PointerBody,
 	ReferenceBody,
 }

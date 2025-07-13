@@ -52,10 +52,11 @@ TypeState :: struct {
 	// Parsing
 	expr : enum {
 		None,
+		Reference,
 		Unique,
 		Pointer,
 		Array,
-		Struct
+		Struct,
 	},
 	
 	fin : bool,
@@ -69,6 +70,7 @@ TypeState :: struct {
 	
 	// Data
 	name_token : TokenID,
+	base_type_token : TokenID,
 	
 	type_body : TypeBody,
 	members : [dynamic] StructMember,
@@ -121,90 +123,6 @@ SquareState :: struct {
 		Start,
 		Expr,
 		End,
-	}
-}
-
-// --- Variables ---
-expectation_identifier := Expectation {
-	positive = {
-		TokenIdentifier {},
-	}
-}
-
-expectation_equals := Expectation {
-	positive = {
-		TokenOperator {
-			field = { .Equals }
-		}
-	}
-}
-
-expectation_terminator := Expectation {
-	positive = {
-		TokenDelimiter {
-			field = { .Terminator }
-		}
-	}
-}
-
-expectation_col := Expectation {
-	positive = {
-		TokenOperator {
-			field = { .Colon }
-		}
-	}
-}
-
-expectation_struct_curly := Expectation {
-	positive = {
-		TokenDelimiter {
-			field = { .CurlyL }
-		}
-	}
-}
-
-expectation_curly_or_comma := Expectation {
-	positive = {
-		TokenDelimiter {
-			field = { .Comma, .CurlyR }
-		}
-	}
-}
-
-expectation_variable_typedef := Expectation {
-	
-	// Possible scenarios
-	// > Keyword unique
-	// > Identifier
-	// > END
-	//
-	// > Keyword struct
-	// > Delimiter {	(begin array)
-	//	 > struct body
-	//	 > Delimiter }	(end struct)
-	// > END
-	//
-	// > Delimiter [		(begin array)
-	//	 > Literal Numeric	(array size)
-	//	 > Delimiter ]		(end array)
-	// > END
-	//
-	// > Operator ^ (pointer)
-	// > Identifier
-	// > END
-	
-	positive = {
-		TokenKeyword {
-			field = { .Struct, .Unique }
-		},
-		
-		TokenDelimiter {
-			field = { .SquareL }
-		},
-		
-		TokenOperator {
-			field = { .Pointer }
-		}
 	}
 }
 
@@ -332,6 +250,12 @@ parse_tokens :: proc(
 					// We know this is a SquareL
 					append_state(&states, SquareState {}, i)
 					s.expr = .Array
+				
+				case TokenIdentifier:
+					// Type reference
+					s.expr = .Reference
+					s.base_type_token = token_id(start, i)
+					s.type_body = ReferenceBody {}
 				}
 				
 				// Finalize expression in next
@@ -340,7 +264,8 @@ parse_tokens :: proc(
 			case .Expr:
 				
 				// Making a unique type reference
-				#partial switch s.expr {
+				final := s.fin // Can move to terminator
+				if !s.fin do #partial switch s.expr {
 				case .Pointer:
 					exp = expectation_identifier
 					succ = parse_expectations(
@@ -349,7 +274,9 @@ parse_tokens :: proc(
 					
 					succ or_break
 					s.fin = true
-					break
+					s.type_body = PointerBody {}
+					
+					s.base_type_token = token_id(start, i)
 				
 				case .Unique:
 					exp = expectation_identifier
@@ -359,14 +286,29 @@ parse_tokens :: proc(
 					
 					succ or_break
 					s.fin = true
-					break
+					s.type_body = ReferenceBody { unique = true }
+					
+					s.base_type_token = token_id(start, i)
+					
+				case .Array:
+					// Get the type of the array
+					exp = expectation_identifier
+					succ = parse_expectations(
+						next, exp
+					)
+					
+					succ or_break
+					s.fin = true
+					
+					s.base_type_token = token_id(start, i)
 					
 				case:
 					s.fin = true
+					final = true
 				}
 				
 				// --- End Of Expression ---
-				s.fin or_break
+				final or_break // Deferred to next token
 				exp = expectation_terminator
 				succ = parse_expectations(
 					next, exp
@@ -380,8 +322,6 @@ parse_tokens :: proc(
 			}
 			
 			if !succ {
-				// fmt.println(s.phase)
-				// fmt.println(last.body, next.body)
 				expect_str = print_expectations(exp, temp)
 				return 0, .Token_Unexpected
 			}
@@ -481,12 +421,48 @@ parse_tokens :: proc(
 			}
 			
 			if !succ {
-				// fmt.println(s.phase)
-				// fmt.println(last.body, next.body)
+				expect_str = print_expectations(exp, temp)
+				return 0, .Token_Unexpected
+			}
+			
+			
+		// Different sorts of brackets
+		case SquareState:
+			succ : bool
+			exp : Expectation
+			
+			switch s.phase {
+			case .Start:
+				exp = expectation_numeric
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				s.value_token = token_id(start, i)
+				s.phase = .Expr
+				
+			case .Expr:
+				exp = expectation_square_close
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				pop_err := pop_state(vm, text, &states)
+				if pop_err != nil do return 0, pop_err
+				
+			case .End:
+				// Most likely not required at all
+			}
+			
+			if !succ {
 				expect_str = print_expectations(exp, temp)
 				return 0, .Token_Unexpected
 			}
 		
+		
+		// Default case (File scope)
 		case:
 			// File scope
 			// Possibilities are endless

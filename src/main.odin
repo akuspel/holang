@@ -46,6 +46,12 @@ main :: proc() {
 	c : int,
 };
 
+#type MyArray = [10] OtherType;
+#type MyPtr = ^OtherType;
+#type MyID = unique int;
+
+#type SlightByte = byte;
+
 fn main() {
 
 	var a : MyType;

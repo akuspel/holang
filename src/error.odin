@@ -79,6 +79,8 @@ ParserError :: enum {
 	
 	Token_Unexpected,	// Received unexpected token
 	Token_Unknown,		// Token type should be known, but isn't
+	
+	Invalid_Array_Size, // Trying to define an array of invalid size
 }
 
 
