@@ -49,7 +49,9 @@ main :: proc() {
 	_ : bool,
 };
 
-#type MyArray = [10] OtherType;
+#const NUM_ELEMS = 10;
+
+#type MyArray = [NUM_ELEMS] OtherType;
 #type MyPtr = ^OtherType;
 #type MyID = unique int;
 
@@ -58,7 +60,13 @@ main :: proc() {
 #const MY_CONSTANT = 10;
 #const OTHER_CONSTANT = 6 + 2 * (3 + 5 / 2.0);
 
+#const FIRST_TRUTH = NUM_ELEMS > OTHER_CONSTANT;
+
 #const THIRD_CONSTANT = (MY_CONSTANT + OTHER_CONSTANT) / 3;
+
+#const SECOND_TRUTH = NUM_ELEMS > THIRD_CONSTANT;
+
+#const THIRD_TRUTH = (2 == 1) || true;
 
 var y : int = 12;
 var x : int = MY_CONSTANT;
@@ -68,11 +76,11 @@ var x : int = MY_CONSTANT;
 // OR NOT!
 
 fn main() {
-
+	
 	var a : MyType;
 	a.a =  0b10;
 	a.b = 0b100;
-
+	
 	if (a.a == a.b) return;
 	if 0b01 return; // Should result in parsing error
 }
@@ -84,6 +92,8 @@ fn main() {
 	
 	parse_err := vm_parse_remainder(vm)
 	if parse_err != nil do fmt.println(parse_err)
+	
+	vm_destroy(&vm)
 }
 
 

@@ -68,6 +68,15 @@ expectation_numeric := Expectation {
 	}
 }
 
+expectation_num_or_ident := Expectation {
+	positive = {
+		TokenLiteral {
+			field = { .Number }
+		},
+		TokenIdentifier {}
+	}
+}
+
 expectation_square_close := Expectation {
 	positive = {
 		TokenDelimiter {

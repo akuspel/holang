@@ -183,7 +183,7 @@ TOKEN_DELIMITER := [Delimiter]string {
 
 @(private="file")
 RUNE_OPERATOR := [?]rune {
-	'+', '-', '*', '/', '^', '<', '>', '=', '!', '?', ':',
+	'+', '-', '*', '/', '^', '<', '>', '=', '!', '?', ':', '|', '&'
 }
 
 @(private="file")

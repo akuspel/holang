@@ -163,6 +163,7 @@ CurlyState :: struct {
 SquareState :: struct {
 	
 	value_token : TokenID,
+	const_id	: ConstID,
 	
 	phase : enum {
 		Start,
@@ -212,6 +213,8 @@ parse_tokens :: proc(
 			end_token	= tokens[i]
 			sub := strings.substring(text, start_token.start, end_token.end) or_else ""
 			fmt.println(sub)
+			
+			fmt.println(states)
 		}
 	}
 	
@@ -674,13 +677,31 @@ parse_tokens :: proc(
 			
 			switch s.phase {
 			case .Start:
-				exp = expectation_numeric
+				exp = expectation_num_or_ident
 				succ = parse_expectations(
 					next, exp
 				)
 				
 				succ or_break
-				s.value_token = token_id(start, i)
+				
+				#partial switch &b in next.body {
+				case TokenLiteral:
+					// It is a number
+					s.value_token = token_id(start, i)
+					s.const_id = -1
+				
+				case TokenIdentifier:
+					// It must be a constant
+					s.value_token = -1
+					
+					// --- Getting A Constant Example ---
+					const_name := strings.substring(text, next.start, next.end) or_else ""
+					const_id, const_err := get_const_id_by_name(vm, const_name)
+					if const_err != nil do return 0, const_err
+					
+					s.const_id = const_id
+				}
+				
 				s.phase = .Expr
 				
 			case .Expr:

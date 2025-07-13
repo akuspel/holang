@@ -117,12 +117,24 @@ solve_state :: proc(vm : VM, text : string, state : ^ParserState) -> (err : Erro
 	
 	case SquareState:
 		
-		// Get variant from value
-		value_token, token_err := get_token(vm, b.value_token)
-		if token_err != nil do return token_err
+		// Get variant from value or const
+		value : Variant
 		
-		value := value_token.value
+		if b.value_token != -1 {
+			value_token, token_err := get_token(vm, b.value_token)
+			if token_err != nil do return token_err
+			
+			value = value_token.value
+			
+		} else if b.const_id != -1 {
+			const, const_err := get_constant(vm, b.const_id)
+			if const_err != nil do return const_err
+			
+			value = const.value
+			
+		}
 		
+		if value == nil do return .Invalid_Value
 		(state.parent != nil) or_break
 		
 		#partial switch &parent_body in state.parent.body {
