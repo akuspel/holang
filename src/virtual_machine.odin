@@ -163,9 +163,70 @@ vm_parse_remainder :: proc(vm : VM) -> (err : Error) {
 
 // --- Utils ---
 
-@(private)
+@(private, require_results)
 get_token :: proc(vm : VM, id : TokenID) -> (token : Token, err : Error) {
 	if vm == nil do return {}, .No_VM
 	if id < 0 || int(id) >= len(vm.tokens) do return {}, .Invalid_Token
 	return vm.tokens[id], nil
+}
+
+@(private, require_results)
+get_constant :: proc(vm : VM, id : ConstID) -> (const : Constant, err : Error) {
+	if vm == nil do return {}, .No_VM
+	if id < 0 || int(id) >= len(vm.constants) do return {}, .Unknown_Const
+	return vm.constants[id], nil
+}
+
+@(private, require_results)
+get_const_id_by_name :: proc(vm : VM, name : string) -> (id : ConstID, err : Error) {
+	if vm == nil do return	-1, .No_VM
+	if name == "" do return -1, .Invalid_Name
+	for &c, i in vm.constants {
+		(c.name == name) or_continue
+		
+		// Found type
+		return ConstID(i), nil
+	}
+	
+	// No matching type
+	return -1, .Unknown_Const
+}
+
+@(private, require_results)
+get_variable :: proc(vm : VM, id : VarID) -> (var : Variable, err : Error) {
+	if vm == nil do return {}, .No_VM
+	num_vars := len(vm.variables)
+	if int(id) >= num_vars || int(id) < -num_vars do return {}, .Unknown_Var
+	if id < 0 do return vm.variables[num_vars + int(id)], nil
+	return vm.variables[id], nil
+}
+
+@(private, require_results)
+get_var_id_by_name :: proc(vm : VM, name : string, reverse := false) -> (id : VarID, err : Error) {
+	if vm == nil do return	0, .No_VM
+	if name == "" do return 0, .Invalid_Name
+	for &c, i in vm.variables {
+		(c.name == name) or_continue
+		
+		// Found type
+		id = VarID(i)
+		if reverse do id = -VarID(len(vm.variables) - 1) + id
+		return id, nil
+	}
+	
+	return 0, .Unknown_Var
+}
+
+// --- Registering ---
+
+register_constant :: proc(vm : VM, const : Constant) -> (err : Error) {
+	if vm == nil do return .No_VM
+	
+	// Check for constant redifinitions
+	for &c in vm.constants do if c.name == const.name do return .Constant_Over
+	
+	// Append
+	append(&vm.constants, const)
+	
+	return
 }

@@ -14,6 +14,12 @@ expectation_identifier := Expectation {
 	}
 }
 
+expectation_operator := Expectation {
+	positive = {
+		TokenOperator {},
+	}
+}
+
 expectation_equals := Expectation {
 	positive = {
 		TokenOperator {
@@ -66,6 +72,23 @@ expectation_square_close := Expectation {
 	positive = {
 		TokenDelimiter {
 			field = { .SquareR }
+		}
+	}
+}
+
+expectation_lit_or_ident := Expectation {
+	positive = {
+		TokenLiteral {},
+		TokenIdentifier {}
+	}
+}
+
+expectation_lit_or_ident_or_paren := Expectation {
+	positive = {
+		TokenLiteral {},
+		TokenIdentifier {},
+		TokenDelimiter {
+			field = { .ParenL }
 		}
 	}
 }

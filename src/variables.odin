@@ -8,6 +8,7 @@ package holang
 // --- Types ---
 Variable :: struct {
 	
+	name : string,
 	ptr, bef : uintptr,
 	// For alignment reasons,
 	// Ptr might have empty space
@@ -17,6 +18,13 @@ Variable :: struct {
 	mutable : bool, // Can't mutate nonmutable things
 	
 }
+
+/* --- VarID ---
+ * variable index in the vm
+ * unique, in that it can fetch
+ * in the negative direction
+ */
+VarID :: distinct int
 
 ExternalVariable :: struct {
 	using _ : Variable,
@@ -31,9 +39,11 @@ ExternalVariable :: struct {
  */
 Constant :: struct {
 	
-	value : Variant,
 	name : string,
+	value : Variant,
 }
+
+ConstID :: distinct int
 
 /* --- Variant ---
  * base underlying data types

@@ -55,6 +55,9 @@ VMError :: enum {
 	
 	No_VM,			// No VM given
 	Unknown_Type,	// Type doesn't exist
+	Unknown_Const,	// Can't get the specific constant
+	Unknown_Var,	// Can't get the spicific variable
+	
 	Type_Overwrite, // Type already exists
 	Unknown_Member, // Can't get the member from Array or Struct
 	Bounds_Check,	// Bounds overflow in Array or Struct
@@ -85,6 +88,16 @@ ParserError :: enum {
 	Invalid_Array_Size, // Trying to define an array of invalid size
 	Struct_Member_Over, // Trying to override struct member (duplicate name)
 	Struct_Member_None, // Trying to not give a name to a struct member
+	
+	Expression_Depth,	// Expression isn't able to exit with depth == 0
+	Expression_Invalid, // Expression results in an invalid (nil) value
+	
+	Invalid_Operator,	// Invalid operator used in expression
+	Invalid_Value,		// Expected a value, none received
+	
+	Constant_Over,		// Trying to override existing constant
+	Constant_None,		// Trying to give constant an empty name
+	
 }
 
 

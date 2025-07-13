@@ -24,10 +24,13 @@ ParserState :: struct {
 
 ParserStateBody :: union {
 	
+	ConstState,
 	TypeState,
 	VariableState,
-	ExpressionState,
 	StructState,
+	
+	ExpressionState,
+	ConstExpressionState,
 	
 	ParenState,
 	CurlyState,
@@ -35,8 +38,25 @@ ParserStateBody :: union {
 }
 
 // --  States  --
+ConstState :: struct {
+	
+	// Parsing
+	phase : enum {
+		Start,	// #const
+		Name,	// MyConst
+		Equals, // =
+		Expr,	// true
+	},
+	
+	// Data
+	name_token : TokenID,
+	value : Variant,
+	
+}
+
 VariableState :: struct {
 	
+	// Parsing
 	phase : enum {
 		Start,	// var
 		Name,	// my_var
@@ -44,7 +64,12 @@ VariableState :: struct {
 		Type,	// int
 		Equals, // =
 		Expr,	// 10
-	}
+	},
+	
+	// Data
+	name_token : TokenID,
+	base_type_token : TokenID,
+	value : Variant,
 }
 
 TypeState :: struct {
@@ -78,8 +103,28 @@ TypeState :: struct {
 
 ExpressionState :: struct {
 	
-	
 }
+
+ConstExpressionState :: struct {
+	// Expression, but its value
+	// Is solved during parsing
+	
+	// Parsing
+	depth : int,
+	phase : enum {
+		Start,		// Entered expression
+		Value,		// Received value (const identifier or literal)
+		Operator,	// E.G. *
+	},
+	
+	// Data
+	value : Variant,
+	values : [dynamic] ConstExprVal,
+}
+
+@(private)
+ConstExprVal :: union { Variant, Operator, Delimiter }
+
 
 StructState :: struct {
 	
@@ -122,7 +167,6 @@ SquareState :: struct {
 	phase : enum {
 		Start,
 		Expr,
-		End,
 	}
 }
 
@@ -190,11 +234,208 @@ parse_tokens :: proc(
 		a = sub_last; b = sub // Store strings for debug printing
 		
 		#partial switch &s in state.body {
+		case ConstExpressionState:
+			succ : bool
+			exp : Expectation
+			
+			expectation_cont_expr_a := Expectation {
+				positive = {
+					TokenIdentifier {},
+					TokenLiteral {},
+					TokenDelimiter {
+						field = { .ParenL }
+					}
+				}
+			}
+			
+			expectation_cont_expr_b := Expectation {
+				positive = {
+					TokenOperator {},
+					TokenDelimiter {}
+					// NOTE: any delimiter that
+					//		 comes after level 0
+					//		 and is NOT a ParenL
+					//		 ends the expression
+				},
+				
+				negative = {
+					TokenDelimiter {
+						field = { .ParenL }
+					}
+				}
+			}
+			
+			switch s.phase {
+			case .Operator:
+				fallthrough
+				
+			case .Start:
+				// Expect a constant identifier
+				// Or a literal value
+				
+				exp = expectation_cont_expr_a
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				
+				s.phase = .Value
+				#partial switch &b in next.body {
+				case TokenIdentifier:
+					
+					// Check for constant
+					const_id, id_err := get_const_id_by_name(vm, sub)
+					if id_err != nil do return 0, id_err
+					
+					const, const_err := get_constant(vm, const_id)
+					if const_err != nil do return 0, const_err
+					
+					value := const.value
+					cexpr_push_value(&s.values, value)
+					
+				case TokenLiteral:
+					
+					cexpr_push_value(&s.values, next.value)
+					
+				case TokenDelimiter:
+					
+					// MUST be a ParenL
+					s.depth += 1
+					s.phase = .Start // Override phase
+					cexpr_push_value(&s.values, b.type)
+				}
+				
+			case .Value:
+				// Expect an operator
+				
+				exp = expectation_cont_expr_b
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				
+				#partial switch &b in next.body {
+				case TokenOperator:
+					
+					// Operator, push
+					s.phase = .Operator
+					cexpr_push_value(&s.values, b.type)
+					
+					// Solve available
+					solve_err := cexpr_solve_top(&s.values)
+					if solve_err != nil do return 0, solve_err
+					
+				case TokenDelimiter:
+					
+					delim: #partial switch b.type {
+					case .ParenR:
+						if s.depth == 0 {
+							
+							// Solve state
+							peek = false // Parent state checks exit
+							pop_err := pop_state(vm, text, &states)
+							if pop_err != nil do return 0, pop_err
+							break
+						}
+						
+						s.depth -= 1
+						s.phase = .Value
+						
+						// Right parentheses reached
+						// Solve until the first parens
+						solve_err := cexpr_solve_value_until_paren(
+							&s.values
+						);	if solve_err != nil do return 0, solve_err
+					
+					case:
+						
+						// IF depth isn't 0, the expression
+						// Has loose ends. No loose ends, Waltuh
+						if s.depth != 0 do return 0, .Expression_Depth
+						
+						// Solve state
+						peek = false // Parent state checks exit
+						pop_err := pop_state(vm, text, &states)
+						if pop_err != nil do return 0, pop_err
+					}
+				}
+			}
+			
+			if !succ {
+				expect_str = print_expectations(exp, temp)
+				return 0, .Token_Unexpected
+			}
+			
+			// --- Iternal Procedures ---
 		
-		// Type Definition
+		// Constant Definition
 		// NOTE: can only be defined in file scope
 		//		 AKA when depth == 0
 		//		 OR  when state.body == nil
+		case ConstState:
+			succ : bool
+			exp : Expectation
+			
+			switch s.phase {
+			case .Start:
+				exp = expectation_identifier
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				
+				s.name_token = token_id(start, i)
+				s.phase = .Name
+			
+			case .Name:
+				exp = expectation_equals
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				s.phase = .Equals
+			
+			case .Equals:
+				exp = expectation_lit_or_ident_or_paren
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				
+				// Peek expression
+				succ = peek_const(vm, text, tokens, i)
+				if !succ do fmt.println("Expected Constant Expression!")
+				succ or_break
+				
+				peek = false // Start expression from when it began
+				append_state(&states, ConstExpressionState {}, i)
+				s.phase = .Expr
+			
+			case .Expr:
+				exp = expectation_terminator
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				
+				// Solve constant
+				pop_err := pop_state(vm, text, &states)
+				if pop_err != nil do return 0, pop_err
+			}
+			
+			if !succ {
+				expect_str = print_expectations(exp, temp)
+				return 0, .Token_Unexpected
+			}
+		
+		// Type Definition
+		// NOTE: can only be defined in file scope
 		case TypeState:
 			succ : bool
 			exp : Expectation
@@ -452,8 +693,6 @@ parse_tokens :: proc(
 				pop_err := pop_state(vm, text, &states)
 				if pop_err != nil do return 0, pop_err
 				
-			case .End:
-				// Most likely not required at all
 			}
 			
 			if !succ {
@@ -495,6 +734,7 @@ parse_tokens :: proc(
 					append_state(&states, VariableState {}, i)
 				
 				case .Constant:
+					append_state(&states, ConstState {}, i)
 				
 				case .Type:
 					append_state(&states, TypeState {}, i)
@@ -519,9 +759,52 @@ parse_tokens :: proc(
 	return num_tokens, nil
 	
 	// --- Internal Procedures ---
-	
 	token_id :: proc(start : TokenID, idx : int) -> TokenID {
 		return start + TokenID(idx)
+	}
+	
+	/* --- peek_const ---
+	 * determine whether an expression is constant
+	 */
+	peek_const :: proc(vm : VM, text : string, tokens : []Token, start : int) -> (is_const : bool) {
+		
+		exp := Expectation {
+			positive = {
+				TokenOperator {
+					field = {}
+				},
+				
+				TokenLiteral {},
+				
+				TokenIdentifier {},
+				
+				TokenDelimiter {
+					field = { .Terminator, .ParenL, .ParenR, },
+				}
+			}
+		}
+		
+		for i in start..<len(tokens) {
+			next := tokens[i]
+			
+			parse_expectations(next, exp) or_break
+			// Matches
+			#partial switch &b in next.body {
+			case TokenIdentifier:
+				
+				// Must be a constant
+				sub := strings.substring(text, next.start, next.end) or_else ""
+				_, const_err := get_const_id_by_name(vm, sub)
+				if const_err != nil do return false
+				
+			case TokenDelimiter:
+				
+				// Expression ended as constant
+				if b.type == .Terminator do return true
+			}
+		}
+		
+		return
 	}
 }
 
@@ -600,7 +883,7 @@ print_field :: proc(
 	defer delete(parts)
 	
 	for v in body.field do append(&parts, fmt.aprint(v, ", ", sep = "", allocator = alloc))
-	if body.field == {} do for t in T do append(&parts, fmt.aprint(t, allocator = alloc))
+	if body.field == {} do for t in T do append(&parts, fmt.aprint(t, ", ", sep = "", allocator = alloc))
 	
 	combo, _ := strings.concatenate(parts[:], alloc)
 	return combo

@@ -236,6 +236,47 @@ solve_state :: proc(vm : VM, text : string, state : ^ParserState) -> (err : Erro
 		fmt.println(new_type)
 		return register_type(vm, new_type)
 	
+	// Constant expression
+	case ConstExpressionState:
+		
+		defer delete(b.values)
+		
+		// Solve expression if there is any left
+		solve_err := cexpr_solve_value_until_paren(
+			&b.values
+		);	if solve_err != nil do return solve_err
+		
+		// Must have exactly one value left in values
+		if len(b.values) != 1 do return .Expression_Invalid
+		value := b.values[0].(Variant) or_else nil
+		if value == nil do return .Expression_Invalid
+		
+		(state.parent != nil) or_break
+		
+		#partial switch &parent_body in state.parent.body {
+		case ConstState:
+			parent_body.value = value
+			
+		}
+		
+	case ConstState:
+	
+		// Create constant
+		new_constant : Constant
+		new_constant.value = b.value
+		if new_constant.value == nil do return .Expression_Invalid
+		
+		name_token, token_err := get_token(vm, b.name_token)
+		if token_err != nil do return token_err
+		
+		new_constant.name = strings.substring(
+			text, name_token.start, name_token.end) or_else ""
+		if new_constant.name == "" do return .Constant_None
+		
+		// Add constant
+		fmt.println(new_constant)
+		return register_constant(vm, new_constant)
+	
 	case:
 	}
 	

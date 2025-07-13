@@ -285,6 +285,9 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 		// NOTE: numbers cannot begin identifiers
 		if last == .Textual && curr == .Numerical do return false
 		
+		// Floating point numericals use Period separator
+		if last == .Numerical && curr == .Separator && r == '.' do return false
+		
 		// Numbers can have a second alphabetical member
 		// E.G. 0x0, 0b0123
 		w := token.end - token.start

@@ -55,10 +55,17 @@ main :: proc() {
 
 #type SlightByte = byte;
 
-
 #const MY_CONSTANT = 10;
+#const OTHER_CONSTANT = 6 + 2 * (3 + 5 / 2.0);
+
+#const THIRD_CONSTANT = (MY_CONSTANT + OTHER_CONSTANT) / 3;
+
 var y : int = 12;
 var x : int = MY_CONSTANT;
+
+// PEEK EXPRESSION
+// TO FIGURE OUT IF ITS CONSTANT
+// OR NOT!
 
 fn main() {
 
