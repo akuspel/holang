@@ -17,16 +17,68 @@ ParserState :: struct {
 	
 	depth : int,
 	body  : ParserStateBody,
+	token : TokenID, // Start token
 	
 	parent : ^ParserState,
 }
 
 ParserStateBody :: union {
 	
+	TypeState,
+	VariableState,
+	ExpressionState,
+	StructState,
 	
+	ParenState,
+	CurlyState,
+	SquareState,
 }
 
 // --  States  --
+VariableState :: struct {
+	
+	phase : enum {
+		Start,	// var
+		Name,	// my_var
+		Col,	// :
+		Type,	// int
+		Equals, // =
+		Expr,	// 10
+	}
+}
+
+TypeState :: struct {
+	
+	// Parsing
+	expr : enum {
+		None,
+		Unique,
+		Pointer,
+		Array,
+		Struct
+	},
+	
+	fin : bool,
+	
+	phase : enum {
+		Start,	// #type
+		Name,	// MyType
+		Equals, // =
+		Expr,	// unique int
+	},
+	
+	// Data
+	name_token : TokenID,
+	
+	type_body : TypeBody,
+	members : [dynamic] StructMember,
+}
+
+ExpressionState :: struct {
+	
+	
+}
+
 StructState :: struct {
 	
 	// #type TypeName = struct {
@@ -36,49 +88,465 @@ StructState :: struct {
 	//	   member_n
 	// }
 	
-	state : enum {
-		Define,
-		
+	// Parsing
+	phase : enum {
+		Start,
+		Body,
+		Member,
+	},
+	
+	member : enum {
+		Name,
+		Col,
+		Type,
+	},
+	
+	// Data
+	members : [dynamic] [2]TokenID, // {name, type}
+}
+
+ParenState :: struct {
+	
+}
+
+CurlyState :: struct {
+	
+}
+
+SquareState :: struct {
+	
+	value_token : TokenID,
+	
+	phase : enum {
+		Start,
+		Expr,
+		End,
 	}
 }
 
+// --- Variables ---
+expectation_identifier := Expectation {
+	positive = {
+		TokenIdentifier {},
+	}
+}
+
+expectation_equals := Expectation {
+	positive = {
+		TokenOperator {
+			field = { .Equals }
+		}
+	}
+}
+
+expectation_terminator := Expectation {
+	positive = {
+		TokenDelimiter {
+			field = { .Terminator }
+		}
+	}
+}
+
+expectation_col := Expectation {
+	positive = {
+		TokenOperator {
+			field = { .Colon }
+		}
+	}
+}
+
+expectation_struct_curly := Expectation {
+	positive = {
+		TokenDelimiter {
+			field = { .CurlyL }
+		}
+	}
+}
+
+expectation_curly_or_comma := Expectation {
+	positive = {
+		TokenDelimiter {
+			field = { .Comma, .CurlyR }
+		}
+	}
+}
+
+expectation_variable_typedef := Expectation {
+	
+	// Possible scenarios
+	// > Keyword unique
+	// > Identifier
+	// > END
+	//
+	// > Keyword struct
+	// > Delimiter {	(begin array)
+	//	 > struct body
+	//	 > Delimiter }	(end struct)
+	// > END
+	//
+	// > Delimiter [		(begin array)
+	//	 > Literal Numeric	(array size)
+	//	 > Delimiter ]		(end array)
+	// > END
+	//
+	// > Operator ^ (pointer)
+	// > Identifier
+	// > END
+	
+	positive = {
+		TokenKeyword {
+			field = { .Struct, .Unique }
+		},
+		
+		TokenDelimiter {
+			field = { .SquareL }
+		},
+		
+		TokenOperator {
+			field = { .Pointer }
+		}
+	}
+}
 
 // --- Procedures ---
 
 parse_tokens :: proc(
+	vm : VM,
 	text : string,
 	tokens : []Token,
+	start : TokenID,
 ) -> (num : int, err : Error) {
+	assert(vm != nil, "VM must be valid!")
 	if text == "" do return 0, .Empty_String
 	if tokens == nil do return 0, .No_Destination
 	
 	num_tokens := len(tokens)
 	last : Token
 	
-	state : ParserState
+	states : [dynamic]ParserState
+	defer delete(states)
+	i : int // Token index
 	
-	for i in 0..<num_tokens {
-		next := tokens[i]
+	// Debug print
+	temp := context.temp_allocator
+	a, b : string
+	expect_str : string
+	defer if err != nil {
+		fmt.println("Encountered Error while Parsing:", err)
 		
+		if err == .Token_Unexpected {
+			
+			fmt.println("Error!", a)
+			fmt.println(expect_str)
+			fmt.println("> Got:", b)
+			
+		}
+		
+		if len(states) > 0 {
+			fmt.println("\nScope:")
+			
+			start_token, end_token : Token
+			start_token = tokens[states[0].token]
+			end_token	= tokens[i]
+			sub := strings.substring(text, start_token.start, end_token.end) or_else ""
+			fmt.println(sub)
+		}
+	}
+	
+	// Parse loop
+	for i < num_tokens || len(states) > 0 {
+		next := tokens[i]
+		peek := true // Iter boolean
+		
+		// Current state is the top of states stack
+		state :=
+			&states[len(states) - 1] if len(states) > 0 else
+			&ParserState {}
+		state.depth = len(states)
+		
+		// Get strings
 		sub, s_ok := strings.substring(text, next.start, next.end)
 		if !s_ok do return 0, .Invalid_String
 		
 		sub_last := strings.substring(text, last.start, last.end) or_else ""
+		a = sub_last; b = sub // Store strings for debug printing
 		
-		switch &s in state {
+		#partial switch &s in state.body {
+		
+		// Type Definition
+		// NOTE: can only be defined in file scope
+		//		 AKA when depth == 0
+		//		 OR  when state.body == nil
+		case TypeState:
+			succ : bool
+			exp : Expectation
 			
+			switch s.phase {
+			case .Start:
+				exp = expectation_identifier
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				s.phase = .Name
+				
+				s.name_token = token_id(start, i)
 			
+			case .Name:
+				exp = expectation_equals
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				s.phase = .Equals
+			
+			case .Equals:
+				
+				// Standard case
+				exp = expectation_variable_typedef
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				// Figure out which type of definition this is
+				#partial switch &b in next.body {
+				case TokenOperator:
+					// We know this is a pointer
+					s.expr = .Pointer
+				
+				case TokenKeyword:
+					// Struct or Unique
+					#partial switch b.type {
+					case .Struct:
+						append_state(&states, StructState {}, i)
+						s.expr = .Struct
+					
+					case .Unique:
+						s.expr = .Unique
+					}
+				
+				case TokenDelimiter:
+					// We know this is a SquareL
+					append_state(&states, SquareState {}, i)
+					s.expr = .Array
+				}
+				
+				// Finalize expression in next
+				s.phase = .Expr
+			
+			case .Expr:
+				
+				// Making a unique type reference
+				#partial switch s.expr {
+				case .Pointer:
+					exp = expectation_identifier
+					succ = parse_expectations(
+						next, exp
+					)
+					
+					succ or_break
+					s.fin = true
+					break
+				
+				case .Unique:
+					exp = expectation_identifier
+					succ = parse_expectations(
+						next, exp
+					)
+					
+					succ or_break
+					s.fin = true
+					break
+					
+				case:
+					s.fin = true
+				}
+				
+				// --- End Of Expression ---
+				s.fin or_break
+				exp = expectation_terminator
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				
+				// Finalize type definition
+				pop_err := pop_state(vm, text, &states)
+				if pop_err != nil do return 0, pop_err
+			}
+			
+			if !succ {
+				// fmt.println(s.phase)
+				// fmt.println(last.body, next.body)
+				expect_str = print_expectations(exp, temp)
+				return 0, .Token_Unexpected
+			}
+		
+		case StructState:
+			succ : bool
+			exp : Expectation
+			
+			expectation_struct_body := Expectation {
+				positive = {
+					TokenIdentifier {},
+					TokenDelimiter {
+						field = { .CurlyR }
+					}
+				}
+			}
+			
+			switch s.phase {
+			case .Start:
+				exp = expectation_struct_curly
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				s.phase = .Body
+				
+			case .Body:
+				exp = expectation_struct_body
+				succ = parse_expectations(
+					next, exp
+				)
+				
+				succ or_break
+				
+				#partial switch &b in next.body {
+				case TokenIdentifier:
+					// Struct field name
+					s.phase  = .Member
+					s.member = .Name
+					
+				case TokenDelimiter:
+					// End of struct
+					pop_err := pop_state(vm, text, &states)
+					if pop_err != nil do return 0, pop_err
+				}
+			
+			case .Member:
+				// Defining a member
+				
+				switch s.member {
+				case .Name:
+					exp = expectation_col
+					succ = parse_expectations(
+						next, exp
+					)
+					
+					succ or_break
+					s.member = .Col
+					
+				case .Col:
+					exp = expectation_identifier
+					succ = parse_expectations(
+						next, exp
+					)
+					
+					succ or_break
+					s.member = .Type
+					
+					// Append the member
+					append(&s.members, [2]TokenID {token_id(start, i-2), token_id(start, i)})
+					
+				case .Type:
+					exp = expectation_curly_or_comma
+					succ = parse_expectations(
+						next, exp
+					)
+					
+					succ or_break
+					#partial switch &b in next.body {
+					case TokenDelimiter:
+						#partial switch b.type {
+						case .Comma:
+							
+							// Next element
+							s.member = .Name
+							s.phase  = .Body
+						
+						case .CurlyR:
+							
+							// End of struct
+							pop_err := pop_state(vm, text, &states)
+							if pop_err != nil do return 0, pop_err
+						}
+					}
+				}
+			}
+			
+			if !succ {
+				// fmt.println(s.phase)
+				// fmt.println(last.body, next.body)
+				expect_str = print_expectations(exp, temp)
+				return 0, .Token_Unexpected
+			}
+		
 		case:
 			// File scope
 			// Possibilities are endless
+			file_scope_expect := Expectation {
+				positive = {
+					TokenKeyword {
+						field = {
+							.Type,
+							.Function,
+							.Variable,
+							.Constant,
+						},
+					},
+				},
+			}
 			
-			
+			// Need a declarative keyword
+			if parse_expectations(
+				next, file_scope_expect
+			) {
+				
+				// Expectation matched
+				// Update State
+				
+				kw := next.body.(TokenKeyword)
+				#partial switch kw.type {
+				case .Function:
+				
+				case .Variable:
+					append_state(&states, VariableState {}, i)
+				
+				case .Constant:
+				
+				case .Type:
+					append_state(&states, TypeState {}, i)
+				
+				case:
+					return 0, .Token_Unknown
+				}
+				
+			} else {
+				
+				expect_str = print_expectations(file_scope_expect, temp)
+				return 0, .Token_Unexpected
+			}
 		}
 		
-		last = next
+		if peek {
+			last = next
+			i += 1
+		}
 	}
 	
 	return num_tokens, nil
+	
+	// --- Internal Procedures ---
+	
+	token_id :: proc(start : TokenID, idx : int) -> TokenID {
+		return start + TokenID(idx)
+	}
 }
 
 parse_expectations :: proc(
@@ -112,35 +580,54 @@ parse_expectations :: proc(
 }
 
 print_expectations :: proc(
-	expects : Expectation
-) {
+	expects : Expectation,
+	alloc := context.temp_allocator,
+	loc := #caller_location
+) -> string {
 	
-	fmt.print("Expected ")
+	parts : [dynamic]string
+	defer delete(parts)
+	
+	fmt.println(loc)
+	
+	append(&parts, fmt.aprint("> Expected ", allocator = alloc))
 	if expects.positive != nil {
-		for &f in expects.positive do print(f)
+		for &f in expects.positive do append(&parts, print(f, alloc))
 	}
 	
 	if expects.negative != nil && len(expects.negative) > 0 {
-		fmt.print("but not ")
-		for &f in expects.negative do print(f)
+		append(&parts, fmt.aprint("but not ", allocator = alloc))
+		for &f in expects.negative do append(&parts, print(f, alloc))
 	}
 	
-	print :: proc(f : TokenType) {
+	combo, _ := strings.concatenate(parts[:], alloc)
+	return combo
+	
+	print :: proc(f : TokenType, alloc := context.allocator) -> string {
 		switch &b in f {
-		case TokenKeyword:		print_field(b)
-		case TokenOperator: 	print_field(b)
-		case TokenIdentifier:	print_field(b)
-		case TokenLiteral:		print_field(b)
-		case TokenDelimiter:	print_field(b)
+		case TokenKeyword:		return print_field(b, alloc)
+		case TokenOperator: 	return print_field(b, alloc)
+		case TokenIdentifier:	return print_field(b, alloc)
+		case TokenLiteral:		return print_field(b, alloc)
+		case TokenDelimiter:	return print_field(b, alloc)
 		}
+		
+		return ""
 	}
 }
 
 print_field :: proc(
-	body : TokenBody($T)
-) {
-	for v in body.field do fmt.println(v)
-	if body.field == {} do for t in T do fmt.println(t)
+	body : TokenBody($T),
+	alloc := context.allocator
+) -> string {
+	parts : [dynamic]string
+	defer delete(parts)
+	
+	for v in body.field do append(&parts, fmt.aprint(v, ", ", sep = "", allocator = alloc))
+	if body.field == {} do for t in T do append(&parts, fmt.aprint(t, allocator = alloc))
+	
+	combo, _ := strings.concatenate(parts[:], alloc)
+	return combo
 }
 
 /* --- expect ---

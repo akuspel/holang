@@ -22,8 +22,8 @@ TypeID :: distinct int
 
 
 /* --- Type ---
- * underlying data type for defining
- * types in holang
+ * underlying data type for
+ * defining types in holang
  */
 Type :: struct {
 	
@@ -115,7 +115,7 @@ StructMember :: struct {
 
 // --  Base Types  --
 type_byte := Type {
-	name = "Byte",
+	name = "byte",
 	
 	size  = 1,
 	align = 1,
@@ -124,7 +124,7 @@ type_byte := Type {
 }
 
 type_bool := Type {
-	name = "Boolean",
+	name = "bool",
 	
 	size  = 8,
 	align = 8,
@@ -133,7 +133,7 @@ type_bool := Type {
 }
 
 type_int := Type {
-	name = "Integer",
+	name = "int",
 	
 	size  = 8,
 	align = 8,
@@ -144,7 +144,7 @@ type_int := Type {
 }
 
 type_uint := Type {
-	name = "Unsigned Integer",
+	name = "uint",
 	
 	size  = 8,
 	align = 8,
@@ -153,17 +153,13 @@ type_uint := Type {
 }
 
 type_float := Type {
-	name = "Float",
+	name = "float",
 	
 	size  = 8,
 	align = 8,
 	
 	body = FloatBody {}
 }
-
-// --  Internal Variables  --
-@(private="file")
-type_array : [dynamic]Type
 
 // --- Procedures ---
 
@@ -186,26 +182,33 @@ register_type :: proc(vm : VM, base : Type) -> (err : Error) {
 	}
 	
 	// Create the type
-	type.id = TypeID(len(type_array))
+	type.id = TypeID(len(vm.types))
 	append(&vm.types, type)
 	
 	return
 }
 
 @(private)
-base_types_init :: proc(vm : VM) {
+base_types_init :: proc(vm : VM) -> (err : Error) {
 	
 	// NOTE: only called when creating the VM,
 	//		 we can be positively sure, that
 	//		 no errors will be happening here
 	
-	register_type(vm, type_byte)
+	err = register_type(vm, type_byte)
+	if err != nil do return
 	
-	register_type(vm, type_int)
-	register_type(vm, type_uint)
+	err = register_type(vm, type_int)
+	if err != nil do return
+	err = register_type(vm, type_uint)
+	if err != nil do return
 	
-	register_type(vm, type_float)
-	register_type(vm, type_bool)
+	err = register_type(vm, type_float)
+	if err != nil do return
+	err = register_type(vm, type_bool)
+	if err != nil do return
+	
+	return
 }
 
 @(require_results)
@@ -213,4 +216,19 @@ get_type :: proc(vm : VM, id : TypeID) -> (type : Type, err : Error) {
 	if vm == nil do return {}, .No_VM
 	if !(int(id) >= 0 && int(id) < len(vm.types)) do return {}, .Unknown_Type
 	return vm.types[id], nil
+}
+
+@(require_results)
+get_type_id_by_name :: proc(vm : VM, name : string) -> (id : TypeID, err : Error) {
+	if vm == nil do return	-1, .No_VM
+	if name == "" do return -1, .Invalid_Name
+	for &t in vm.types {
+		(t.name == name) or_continue
+		
+		// Found type
+		return t.id, nil
+	}
+	
+	// No matching type
+	return -1, .Unknown_Type
 }

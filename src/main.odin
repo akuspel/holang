@@ -37,16 +37,23 @@ main :: proc() {
 	b : int,
 	c : float,
 	d : bool,
-}
+};
+
+#type OtherType = struct {
+	hmm : MyType,
+	a : byte,
+	b : byte,
+	c : int,
+};
 
 fn main() {
 
-	var a : MyType
-	a.a =  0b10
-	a.b = 0b100
+	var a : MyType;
+	a.a =  0b10;
+	a.b = 0b100;
 
-	if (a.a == a.b) return
-	if 0b01 return
+	if (a.a == a.b) return;
+	if 0b01 return; // Should result in parsing error
 }
 
 `

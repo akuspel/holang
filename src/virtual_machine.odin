@@ -65,7 +65,8 @@ vm_init :: proc(stack, heap : int) -> (vm : VM, err : Error) {
 	mem.dynamic_arena_init(&vm.type_arena)
 	
 	// Standard setup
-	base_types_init(vm)
+	types_err := base_types_init(vm)
+	if types_err != nil do return nil, types_err
 	
 	return
 }
@@ -109,6 +110,16 @@ vm_reset :: proc(vm : VM) -> (err : Error) {
 	return
 }
 
+@(private)
+/* --- vm_get_type_allocator ---
+ * get the dynamic arena allocator
+ * for storing type data
+ */
+vm_get_type_allocator :: proc(vm : VM) -> (alloc : mem.Allocator, err : Error) {
+	if vm == nil do return {}, .No_VM
+	return mem.dynamic_arena_allocator(&vm.type_arena), nil
+}
+
 /* --- vm_tokenise_remainder ---
  * tokenise the remaining text
  * stored in the virtual machine
@@ -139,12 +150,22 @@ vm_parse_remainder :: proc(vm : VM) -> (err : Error) {
 	if n_tokens  < vm.parsed_to do return .Token_Mismatch
 	if vm.tokenised_to < 0 do return .Token_Mismatch
 	
-	n, p_err := parse_tokens(vm.text, vm.tokens[vm.parsed_to:n_tokens])
-	if p_err != nil do return p_err
+	n, p_err := parse_tokens(
+		vm, vm.text, vm.tokens[vm.parsed_to:n_tokens],
+		TokenID(vm.parsed_to)
+	);	if p_err != nil do return p_err
 	
 	vm.parsed_to += n
 	if vm.parsed_to != n_tokens do return .Token_Mismatch
 	
 	return
-	
+}
+
+// --- Utils ---
+
+@(private)
+get_token :: proc(vm : VM, id : TokenID) -> (token : Token, err : Error) {
+	if vm == nil do return {}, .No_VM
+	if id < 0 || int(id) >= len(vm.tokens) do return {}, .Invalid_Token
+	return vm.tokens[id], nil
 }

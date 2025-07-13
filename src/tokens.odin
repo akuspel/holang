@@ -22,6 +22,8 @@ Token :: struct {
 	ident : int,
 }
 
+TokenID :: distinct int
+
 // --  Tokenisation  --
 TokenType :: union {
 	
@@ -50,6 +52,8 @@ Keyword :: enum {
 	Variable,
 	Constant,
 	Unique,
+	
+	Struct,
 }
 
 TokenDelimiter :: TokenBody(Delimiter)
@@ -101,6 +105,7 @@ Operator :: enum {
 	Pointer,	// ^
 	Reference,	// &
 	Return, 	// ->
+	Colon,		// :
 }
 
 TokenIdentifier :: TokenBody(Identifier)
@@ -155,6 +160,7 @@ TOKEN_OPERATOR := [Operator]string {
 	.Pointer   = "^",
 	.Reference = "&",
 	.Return    = "->",
+	.Colon	   = ":",
 }
 
 TOKEN_DELIMITER := [Delimiter]string {

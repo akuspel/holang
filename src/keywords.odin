@@ -18,6 +18,8 @@ TOKEN_KEYWORD := [Keyword]string {
 	.Variable	= "var",
 	.Constant	= "#const",
 	.Unique 	= "unique",
+	
+	.Struct = "struct",
 }
 
 KEYWORD_EXPECTATIONS := [Keyword]Expectation {
@@ -27,9 +29,7 @@ KEYWORD_EXPECTATIONS := [Keyword]Expectation {
 		
 		positive = {
 			TokenDelimiter {
-				field = {
-					.ParenL,
-				}
+				field = { .ParenL }
 			}
 		},
 	},
@@ -39,9 +39,7 @@ KEYWORD_EXPECTATIONS := [Keyword]Expectation {
 		
 		positive = {
 			TokenDelimiter {
-				field = {
-					.CurlyL,
-				}
+				field = { .CurlyL }
 			}
 		},
 	},
@@ -51,9 +49,7 @@ KEYWORD_EXPECTATIONS := [Keyword]Expectation {
 		
 		positive = {
 			TokenDelimiter {
-				field = {
-					.ParenL,
-				}
+				field = { .ParenL }
 			}
 		},
 	},
@@ -63,9 +59,7 @@ KEYWORD_EXPECTATIONS := [Keyword]Expectation {
 		
 		positive = {
 			TokenDelimiter {
-				field = {
-					.ParenL,
-				}
+				field = { .ParenL }
 			}
 		},
 	},
@@ -115,4 +109,15 @@ KEYWORD_EXPECTATIONS := [Keyword]Expectation {
 			TokenIdentifier {}
 		},
 	},
+	
+	.Struct = {
+		// After a struct keyword, we must get Curlies
+		// E.G. #type MyStruct = struct { ... }
+		
+		positive = {
+			TokenDelimiter {
+				field = { .CurlyL }
+			}
+		}
+	}
 }
