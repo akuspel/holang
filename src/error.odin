@@ -43,6 +43,8 @@ MemoryError :: enum {
 	None,
 	
 	Null_Pointer,	// Null pointer given
+	Pointer_OOB,	// Pointing to Out Of Bounds memory
+	
 	Copy_Issue, 	// Unable to copy memory
 	Invalid_Size,	// Invalid memory size, usually negative or zero
 }
@@ -81,6 +83,8 @@ ParserError :: enum {
 	Token_Unknown,		// Token type should be known, but isn't
 	
 	Invalid_Array_Size, // Trying to define an array of invalid size
+	Struct_Member_Over, // Trying to override struct member (duplicate name)
+	Struct_Member_None, // Trying to not give a name to a struct member
 }
 
 

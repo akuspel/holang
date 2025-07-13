@@ -44,6 +44,9 @@ main :: proc() {
 	a : byte,
 	b : byte,
 	c : int,
+	
+	_ : int,
+	_ : bool,
 };
 
 #type MyArray = [10] OtherType;
@@ -51,6 +54,11 @@ main :: proc() {
 #type MyID = unique int;
 
 #type SlightByte = byte;
+
+
+#const MY_CONSTANT = 10;
+var y : int = 12;
+var x : int = MY_CONSTANT;
 
 fn main() {
 

@@ -121,6 +121,27 @@ get_variable_value :: proc(vm : VM, v : Variable, off : ^Child) -> (value : Vari
 	return
 }
 
+@(private)
+dereference_pointer :: proc(
+	vm : VM,
+	ptr  : uintptr,
+	base : TypeID
+) -> (value : Variant, err : Error) {
+	if vm == nil do return nil, .No_VM
+	if ptr == 0  do return nil, .Null_Pointer
+	
+	type, type_err := get_type(vm, base)
+	if type_err != nil do return nil, type_err
+	
+	if ptr - uintptr(type.size) > uintptr(vm.size) do return nil, .Pointer_OOB
+	
+	temp_variable : Variable
+	temp_variable.type = base
+	temp_variable.ptr  = ptr
+	
+	return get_variable_value(vm, temp_variable, nil)
+}
+
 get_external_variable_value :: proc(
 	vm : VM,
 	v  : ExternalVariable,

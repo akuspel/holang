@@ -100,8 +100,13 @@ solve_state :: proc(vm : VM, text : string, state : ^ParserState) -> (err : Erro
 				name	 := strings.substring(text, name_token.start, name_token.end) or_else ""
 				typename := strings.substring(text, type_token.start, type_token.end) or_else ""
 				
+				// Check name
+				if name == "" do return .Struct_Member_None // Invalid name
+				if name != "_" do for &m in parent_body.members do if m.name == name do return .Struct_Member_Over
+				
 				type_id, type_err := get_type_id_by_name(vm, typename)
 				if type_err != nil do return type_err
+				
 				
 				// Assign member values
 				member.name = name
