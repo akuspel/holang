@@ -226,11 +226,14 @@ parse_tokens :: proc(
 			
 			fmt.println(states)
 		}
+		
+		// Clean states (ignore errors)
+		for len(states) > 0 do pop_state(vm, text, &states)
 	}
 	
 	// Parse loop
 	for i < num_tokens || len(states) > 0 {
-		next := tokens[i]; defer if err != nil do last = next
+		next := &tokens[i]; defer if err != nil do last = next^
 		peek := true // Iter boolean
 		
 		// Current state is the top of states stack
@@ -288,7 +291,7 @@ parse_tokens :: proc(
 				
 				exp = expectation_cont_expr_a
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -324,7 +327,7 @@ parse_tokens :: proc(
 				
 				exp = expectation_cont_expr_b
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -395,7 +398,7 @@ parse_tokens :: proc(
 			case .Start:
 				exp = expectation_identifier
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -406,7 +409,7 @@ parse_tokens :: proc(
 			case .Name:
 				exp = expectation_equals
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -415,7 +418,7 @@ parse_tokens :: proc(
 			case .Equals:
 				exp = expectation_lit_or_ident_or_paren
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -432,7 +435,7 @@ parse_tokens :: proc(
 			case .Expr:
 				exp = expectation_terminator
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -457,7 +460,7 @@ parse_tokens :: proc(
 			case .Start:
 				exp = expectation_identifier
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -468,7 +471,7 @@ parse_tokens :: proc(
 			case .Name:
 				exp = expectation_equals
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -479,7 +482,7 @@ parse_tokens :: proc(
 				// Standard case
 				exp = expectation_variable_typedef
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -523,7 +526,7 @@ parse_tokens :: proc(
 				case .Pointer:
 					exp = expectation_identifier
 					succ = parse_expectations(
-						next, exp
+						next^, exp
 					)
 					
 					succ or_break
@@ -535,7 +538,7 @@ parse_tokens :: proc(
 				case .Unique:
 					exp = expectation_identifier
 					succ = parse_expectations(
-						next, exp
+						next^, exp
 					)
 					
 					succ or_break
@@ -548,7 +551,7 @@ parse_tokens :: proc(
 					// Get the type of the array
 					exp = expectation_identifier
 					succ = parse_expectations(
-						next, exp
+						next^, exp
 					)
 					
 					succ or_break
@@ -565,7 +568,7 @@ parse_tokens :: proc(
 				final or_break // Deferred to next token
 				exp = expectation_terminator
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -597,7 +600,7 @@ parse_tokens :: proc(
 			case .Start:
 				exp = expectation_struct_curly
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -606,7 +609,7 @@ parse_tokens :: proc(
 			case .Body:
 				exp = expectation_struct_body
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -630,7 +633,7 @@ parse_tokens :: proc(
 				case .Name:
 					exp = expectation_col
 					succ = parse_expectations(
-						next, exp
+						next^, exp
 					)
 					
 					succ or_break
@@ -639,7 +642,7 @@ parse_tokens :: proc(
 				case .Col:
 					exp = expectation_identifier
 					succ = parse_expectations(
-						next, exp
+						next^, exp
 					)
 					
 					succ or_break
@@ -651,7 +654,7 @@ parse_tokens :: proc(
 				case .Type:
 					exp = expectation_curly_or_comma
 					succ = parse_expectations(
-						next, exp
+						next^, exp
 					)
 					
 					succ or_break
@@ -689,7 +692,7 @@ parse_tokens :: proc(
 			case .Start:
 				exp = expectation_num_or_ident
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -717,7 +720,7 @@ parse_tokens :: proc(
 			case .Expr:
 				exp = expectation_square_close
 				succ = parse_expectations(
-					next, exp
+					next^, exp
 				)
 				
 				succ or_break
@@ -751,7 +754,7 @@ parse_tokens :: proc(
 			
 			// Need a declarative keyword
 			if parse_expectations(
-				next, file_scope_expect
+				next^, file_scope_expect
 			) {
 				
 				// Expectation matched
@@ -782,7 +785,7 @@ parse_tokens :: proc(
 		}
 		
 		if peek {
-			last = next
+			last = next^
 			i += 1
 		}
 	}

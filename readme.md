@@ -147,6 +147,7 @@ fn new_actor(name : cstring, pos : Vector2, col : Color255) -> (actor : Actor, i
 
 // Automatically get types from function
 var actor, id = new_actor("Homeshift Boy", Vec2 {2, 3.4}, Color255 {10, 200, 30, 255});
+var second_id = new_actor("Other boy", Vec2 {10, 11}, Color255 {1, 2, 3, 4}).id; // Return selection
 print(actor.name);
 
 // Nice example, say I so myself!

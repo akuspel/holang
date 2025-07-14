@@ -52,13 +52,14 @@ Keyword :: enum {
 	Elif,
 	For,
 	
+	Constant,
 	Type,
 	Function,
 	Variable,
-	Constant,
-	Unique,
 	
 	Struct,
+	Unique,
+	Immutable,
 }
 
 TokenDelimiter :: TokenBody(Delimiter)
@@ -117,10 +118,10 @@ TokenIdentifier :: TokenBody(Identifier)
 Identifier :: enum {
 	
 	Unknown,
-	Type,
-	Variable,
 	Constant,
+	Type,
 	Function,
+	Variable,
 }
 
 // --  Runes  --

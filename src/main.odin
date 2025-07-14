@@ -35,16 +35,16 @@ main :: proc() {
 /* --- HoLang Example ---
  * an example of valid HoLang code
  * 
- *    --- NOTE ---
+ *	  --- NOTE ---
  * the code currently passes*
- * the  Parsing step up 'till
+ * the	Parsing step up 'till
  * // <--- Works Until
  * !!! unless marked with !!!
  * // <--- Doesn't work
  * 
  * (* this doesn't mean it does anything,
- *  only that the Parser recognises the
- *  syntax )
+ *	only that the Parser recognises the
+ *	syntax )
  */
 
 // --- Types ---
@@ -63,81 +63,82 @@ main :: proc() {
 
 #const MAX_ACTORS = 100;
 #type ActorID = struct {
-    idx : int,
-    gen : int,
+	idx : int,
+	gen : int,
 };
 #type Actor = struct {
-    // Nested Structs
-    // NOTE: the struct type
-    //     must be defined
-    //     separately
-    id : ActorID,
-    
-    // Other stuff
-    name : cstring,
-    health : uint,
-    
-    // Data
-    flags : u8,
-    _ : u8, // Unnamed members, for alignment purposes
-    pos : Vec2,
-    col : Color,
+	// Nested Structs
+	// NOTE: the struct type
+	//	   must be defined
+	//	   separately
+	id : ActorID,
+	
+	// Other stuff
+	name : cstring,
+	health : uint,
+	
+	// Data
+	flags : u8,
+	_ : u8, // Unnamed members, for alignment purposes
+	pos : Vec2,
+	col : Color,
 };
 
 
 // --- Variables ---
 #type ActorArray = [MAX_ACTORS]Actor;
-var actors : ActorArray;        // <--- Does Not Work
-var string_data : StringBuf;    // <--- Does Not Work
+var actors : ActorArray;		// <--- Does Not Work
+var string_data : StringBuf;	// <--- Does Not Work
 
 // <--- Works Until
 var num_actors : uint;
 
 // --- Functions ---
 fn new_actor(name : cstring, pos : Vector2, col : Color255) -> (actor : Actor, id : ActorID) {
-    if (name == 0) return; // C-like single command execution
-    if (num_actors >= MAX_ACTORS) return Actor {}, ActorID {-1, -1};
-    
-    // Constant expression conditional
-    // No runtime calculation cost (to be or not to be)
-    when (MAX_ACTORS < 100) {
-        
-        print("This is a thing!"); // Hopefully I do figure out strings...
-    }
-    
-    // There are NO runtime constants
-    // ( #const is limited to file space )
-    // But you can define immutable variables
-    var test : immutable int = 0b0100;
-    
-    actor.name = name;
-    actor.pos  = pos;
-    actor.col = Color {
-        float(col.r) / 256,
-        float(col.g) / 256,
-        float(col.b) / 256,
-        float(col.a) / 256,
-    }; // Array literal
-    
-    // THOUGHT:
-    // Array (and struct) literals
-    // Must have typename included
-    // So the parser can parse the
-    // Literal based on that, and
-    // After parsing typecheck if
-    // Literal and variable type match!
-    // (happy cat noises)
-    
-    id = ActorID {
-        int(num_actors),
-        0,
-    };
-    
-    return // Automatically return named returns
+	if (name == 0) return; // C-like single command execution
+	if (num_actors >= MAX_ACTORS) return Actor {}, ActorID {-1, -1};
+	
+	// Constant expression conditional
+	// No runtime calculation cost (to be or not to be)
+	when (MAX_ACTORS < 100) {
+		
+		print("This is a thing!"); // Hopefully I do figure out strings...
+	}
+	
+	// There are NO runtime constants
+	// ( #const is limited to file space )
+	// But you can define immutable variables
+	var test : immutable int = 0b0100;
+	
+	actor.name = name;
+	actor.pos  = pos;
+	actor.col = Color {
+		float(col.r) / 256,
+		float(col.g) / 256,
+		float(col.b) / 256,
+		float(col.a) / 256,
+	}; // Array literal
+	
+	// THOUGHT:
+	// Array (and struct) literals
+	// Must have typename included
+	// So the parser can parse the
+	// Literal based on that, and
+	// After parsing typecheck if
+	// Literal and variable type match!
+	// (happy cat noises)
+	
+	id = ActorID {
+		int(num_actors),
+		0,
+	};
+	
+	return // Automatically return named returns
 }
 
 // Automatically get types from function
 var actor, id = new_actor("Homeshift Boy", Vec2 {2, 3.4}, Color255 {10, 200, 30, 255});
+var second_id = new_actor("Other boy", Vec2 {10, 11}, Color255 {1, 2, 3, 4}).id; // Return selection
 print(actor.name);
 
 // Nice example, say I so myself!

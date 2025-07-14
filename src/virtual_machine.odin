@@ -161,8 +161,8 @@ vm_parse_remainder :: proc(vm : VM) -> (err : Error) {
 	return
 }
 
-// --- Utils ---
 
+// --- Getters ---
 @(private, require_results)
 get_token :: proc(vm : VM, id : TokenID) -> (token : Token, err : Error) {
 	if vm == nil do return {}, .No_VM
@@ -223,10 +223,20 @@ register_constant :: proc(vm : VM, const : Constant) -> (err : Error) {
 	if vm == nil do return .No_VM
 	
 	// Check for constant redifinitions
-	for &c in vm.constants do if c.name == const.name do return .Constant_Over
+	if get_identifier_type(vm, const.name) != .Unknown do return .Constant_Over
 	
 	// Append
 	append(&vm.constants, const)
 	
 	return
+}
+
+// --- Utils ---
+get_identifier_type :: proc(vm : VM, name : string) -> (type : Identifier) {
+	// Named value precedence
+	for &c in vm.constants do if c.name == name do return .Constant
+	for &t in vm.types	   do if t.name == name do return .Type
+	for &f in vm.functions do if f.name == name do return .Function
+	for &v in vm.variables do if v.name == name do return .Variable
+	return // Unknown identifier type
 }

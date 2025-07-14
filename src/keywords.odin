@@ -13,13 +13,14 @@ TOKEN_KEYWORD := [Keyword]string {
 	.Elif = "elif",
 	.For  = "for",
 	
+	.Constant	= "#const",
 	.Type		= "#type",
 	.Function	= "fn",
 	.Variable	= "var",
-	.Constant	= "#const",
-	.Unique 	= "unique",
 	
 	.Struct = "struct",
+	.Unique = "unique",
+	.Immutable = "immutable",
 }
 
 KEYWORD_EXPECTATIONS := [Keyword]Expectation {
@@ -117,6 +118,17 @@ KEYWORD_EXPECTATIONS := [Keyword]Expectation {
 		positive = {
 			TokenDelimiter {
 				field = { .CurlyL }
+			}
+		}
+	},
+	
+	.Immutable = {
+		// A type identifier
+		// Must follow immutable
+		
+		positive = {
+			TokenIdentifier {
+				field = { .Unknown, .Type }
 			}
 		}
 	}

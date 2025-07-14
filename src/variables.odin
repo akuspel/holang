@@ -162,9 +162,12 @@ get_external_variable_value :: proc(
 variable_push :: proc(
 	vm : VM,
 	type : TypeID,
+	name : string,
 	mut  : bool,
 ) -> (err : Error) {
 	if vm == nil do return .No_VM
+	
+	if get_identifier_type(vm, name) != .Unknown do return .Variable_Over
 	
 	sp, stack_err := get_stack_ptr(vm.stack)
 	if stack_err != nil do return stack_err

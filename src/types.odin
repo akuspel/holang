@@ -169,7 +169,7 @@ register_type :: proc(vm : VM, base : Type) -> (err : Error) {
 	type := base
 	
 	// Check for type redifinitions
-	for &t in vm.types do if t.name == base.name do return .Type_Overwrite
+	if get_identifier_type(vm, type.name) != .Unknown do return .Type_Over
 	
 	// Copy memory to VM
 	alloc := mem.dynamic_arena_allocator(&vm.type_arena)

@@ -58,10 +58,9 @@ VMError :: enum {
 	Unknown_Const,	// Can't get the specific constant
 	Unknown_Var,	// Can't get the spicific variable
 	
-	Type_Overwrite, // Type already exists
+	Invalid_Name,	// Invalid named value name
 	Unknown_Member, // Can't get the member from Array or Struct
 	Bounds_Check,	// Bounds overflow in Array or Struct
-	Invalid_Name,	// Invalid type name
 	Invalid_Token,	// Can't get the specific member
 	
 	Text_Mismatch,	// Mismatch with text length and tokenisation count
@@ -96,8 +95,8 @@ ParserError :: enum {
 	Invalid_Value,		// Expected a value, none received
 	
 	Constant_Over,		// Trying to override existing constant
-	Constant_None,		// Trying to give constant an empty name
-	
+	Variable_Over,		// Trying to override existing
+	Type_Over,			// Trying to override existing
 }
 
 

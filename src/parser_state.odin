@@ -283,7 +283,7 @@ solve_state :: proc(vm : VM, text : string, state : ^ParserState) -> (err : Erro
 		
 		new_constant.name = strings.substring(
 			text, name_token.start, name_token.end) or_else ""
-		if new_constant.name == "" do return .Constant_None
+		if new_constant.name == "" do return .Invalid_Name
 		
 		// Add constant
 		fmt.println(new_constant)
