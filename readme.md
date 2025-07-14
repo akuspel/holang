@@ -9,8 +9,7 @@ Because safety is boring, HoLang supports *dangerous* pointers and pointer arith
 
 ## Features
 
-Thus far, only the Tokeniser is in a near-complete state. Remaining features are String Literal tokenisation and Comment skipping.
-> Planned: nested multiline comments AND single line comments
+Thus far, only the Tokeniser is in a near-complete state. The last remaining feature is String Literal tokenisation.
 
 In addition to the Tokeniser, the Parser is beginning to take shape, with the after mentioned systems (almost) fully implemented:
 - Type definitions
@@ -46,16 +45,15 @@ Example:
  * an example of valid HoLang code
  * 
  *	  --- NOTE ---
- * ignoring comments (TODO),
  * the code currently passes*
- * the	Parsing step up till
+ * the	Parsing step up 'till
  * // <--- Works Until
  * !!! unless marked with !!!
  * // <--- Doesn't work
  * 
- * (* this does not mean it does anything,
+ * (* this doesn't mean it does anything,
  *	only that the Parser recognises the
- *	syntax)
+ *	syntax )
  */
 
 // --- Types ---
@@ -91,7 +89,7 @@ Example:
 	// Data
 	flags : u8,
 	_ : u8, // Unnamed members, for alignment purposes
-	pos : Vector2,
+	pos : Vec2,
 	col : Color,
 };
 

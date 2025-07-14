@@ -20,6 +20,11 @@ Token :: struct {
 	
 	value : Variant,
 	ident : int,
+	
+	meta : struct {
+		line_num : int,
+		rune_num : int,
+	}
 }
 
 TokenID :: distinct int
@@ -129,6 +134,8 @@ RuneType :: enum {
 	Numerical,		// E.G. '1' '2' '3'
 	Textual,		// E.G. 'A' '_'
 	
+	Comment,		// Ignore comments
+	String, 		// E.G. "This A String Literal\", "
 }
 
 // --- Variables
@@ -181,6 +188,10 @@ TOKEN_DELIMITER := [Delimiter]string {
 	.EOF = "",
 }
 
+TOKEN_COMMENT_SINGLE  :: "//"
+TOKEN_COMMENT_MULTI_S :: "/*"
+TOKEN_COMMENT_MULTI_E :: "*/"
+
 @(private="file")
 RUNE_OPERATOR := [?]rune {
 	'+', '-', '*', '/', '^', '<', '>', '=', '!', '?', ':', '|', '&'
@@ -223,11 +234,71 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 	
 	last_type := get_rune_type(utf8.rune_at_pos(text, 0))
 	last_token : Token
+	
+	multi_depth : int // Multiline comments
+	is_sl_comment  : bool
+	is_str_literal : bool
+	
+	// Source code tracking
+	line_num : int = 1
+	rune_num : int
+	
 	for g, i in graphemes {
 		r := utf8.rune_at_pos(text, g.rune_index)
-		type := get_rune_type(r)
 		
-		sub := strings.substring(text, last_token.start, last_token.end) or_else ""
+		if r == '\n' {
+			line_num += 1
+			rune_num  = 0
+			
+			// Automatically end SL comments
+			is_sl_comment = false
+			
+			continue
+		}
+		
+		type := get_rune_type(r)
+		if is_sl_comment || multi_depth > 0 do type = .Comment
+		
+		sub  := strings.substring(text, last_token.start, last_token.end) or_else ""
+		nsub := strings.substring(text, last_token.start, g.rune_index + g.width) or_else ""
+		
+		// Check for comment
+		num_runes_in_sub := utf8.rune_count_in_string(nsub)
+		cs	:= strings.ends_with(nsub, TOKEN_COMMENT_SINGLE)
+		cms := strings.ends_with(nsub, TOKEN_COMMENT_MULTI_S)
+		cme := strings.ends_with(nsub, TOKEN_COMMENT_MULTI_E)
+		comment_started : bool
+		if type != .Comment {
+			
+			if cms do multi_depth += 1
+			is_sl_comment = cs
+			
+			comment_started = cs || cms
+		} else {
+			
+			d := multi_depth
+			if cms do multi_depth += 1
+			if cme do multi_depth -= 1
+		}
+		
+		if comment_started { // New comment
+			type = .Comment
+			
+			if num_runes_in_sub == 2 { // No need to separate
+				last_type = .Comment
+				
+			} else {
+				last_token.end -= 1
+				
+				// Sub must be recalculated
+				sub = strings.substring(
+					text,
+					last_token.start, 
+					last_token.end
+				) or_else ""
+			}
+		}
+		
 		apnd: if next_token(r, sub, type, last_type, &last_token, false) {
 			defer {
 				last_type = type
@@ -235,6 +306,11 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 				last_token = {
 					start = g.rune_index,
 					end   = g.rune_index,
+					
+					meta = {
+						line_num,
+						rune_num,
+					}
 				}
 			}
 			
@@ -251,12 +327,19 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 			last_token = {
 				start = g.rune_index,
 				end   = g.rune_index + g.width,
+				
+				meta = {
+					line_num,
+					rune_num,
+				}
 			}
 			
 			sub := strings.substring(text, last_token.start, last_token.end) or_else ""
 			next_token(r, sub, type, last_type, &last_token, true)
 			append_token(arr, last_token, sub)
 		}
+		
+		rune_num += 1
 	}
 	
 	return nr, nil
@@ -295,7 +378,7 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 		if last == .Numerical && curr == .Textual && w == 1 && x_or_b do return false
 		
 		switch last {
-		case .Null, .Space:
+		case .Null, .Space, .Comment:
 			// Ignore
 		
 		case .Textual:
@@ -379,6 +462,9 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 				integer, ok := strconv.parse_int(sub)
 				if ok do token.value = integer
 			}
+			
+		case .String:
+			// Ignore for now (TODO)
 		}
 		
 		// Should select next

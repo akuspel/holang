@@ -196,6 +196,8 @@ parse_tokens :: proc(
 	expect_str : string
 	defer if err != nil {
 		fmt.println("Encountered Error while Parsing:", err)
+		fmt.printfln("On line %i, column %i", last.meta.line_num, last.meta.rune_num)
+		assert(err != .Invalid_String, "NMOOO")
 		
 		if err == .Token_Unexpected {
 			
@@ -215,12 +217,20 @@ parse_tokens :: proc(
 			fmt.println(sub)
 			
 			fmt.println(states)
+		} else {
+			fmt.println("\nScope:")
+			
+			next := tokens[i]
+			sub := strings.substring(text, 0, next.end) or_else ""
+			fmt.println(sub)
+			
+			fmt.println(states)
 		}
 	}
 	
 	// Parse loop
 	for i < num_tokens || len(states) > 0 {
-		next := tokens[i]
+		next := tokens[i]; defer if err != nil do last = next
 		peek := true // Iter boolean
 		
 		// Current state is the top of states stack
