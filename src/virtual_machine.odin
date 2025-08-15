@@ -20,6 +20,8 @@ VirtualMachine :: struct {
 	
 	types : [dynamic]Type,
 	
+	commands : []Command,
+	
 	scope : int,
 	
 	// Parsing
@@ -34,6 +36,7 @@ VirtualMachine :: struct {
 	heap  : int,
 	stack : ^Stack,
 	
+	cmd_arena  : mem.Dynamic_Arena,
 	type_arena : mem.Dynamic_Arena,
 }
 
@@ -62,6 +65,7 @@ vm_init :: proc(stack, heap : int) -> (vm : VM, err : Error) {
 	vm.size  = size
 	vm.heap  = heap
 	
+	mem.dynamic_arena_init(&vm.cmd_arena)
 	mem.dynamic_arena_init(&vm.type_arena)
 	
 	// Standard setup
@@ -84,7 +88,10 @@ vm_destroy :: proc(vm : ^VM) -> (err : Error) {
 	
 	delete(vm^.tokens)
 	
+	mem.dynamic_arena_destroy(&vm^.cmd_arena)
 	mem.dynamic_arena_destroy(&vm^.type_arena)
+	
+	vm^.commands = nil
 	
 	free(vm^)
 	vm^ = nil
@@ -100,8 +107,11 @@ vm_reset :: proc(vm : VM) -> (err : Error) {
 	if vm == nil do return .No_VM
 	
 	clear(&vm.types)
+	mem.dynamic_arena_free_all(&vm.cmd_arena)
 	mem.dynamic_arena_free_all(&vm.type_arena)
 	err = stack_reset(vm.stack)
+	
+	vm.commands = nil
 	
 	clear(&vm.variables)
 	clear(&vm.functions)
@@ -215,6 +225,28 @@ get_var_id_by_name :: proc(vm : VM, name : string, reverse := false) -> (id : Va
 	}
 	
 	return 0, .Unknown_Var
+}
+
+@(private, require_results)
+get_function :: proc(vm : VM, id : FunctionID) -> (func : Function, err : Error) {
+	if vm == nil do return {}, .No_VM
+	if id < 0 || int(id) >= len(vm.functions) do return {}, .Unknown_Func
+	return vm.functions[id], nil
+}
+
+@(private, require_results)
+get_func_id_by_name :: proc(vm : VM, name : string) -> (id : FunctionID, err : Error) {
+	if vm == nil do return	-1, .No_VM
+	if name == "" do return -1, .Invalid_Name
+	for &f, i in vm.functions {
+		(f.name == name) or_continue
+		
+		// Found type
+		return FunctionID(i), nil
+	}
+	
+	// No matching type
+	return -1, .Unknown_Const
 }
 
 // --- Registering ---

@@ -36,6 +36,17 @@ expectation_terminator := Expectation {
 	}
 }
 
+expectation_expr_or_end := Expectation {
+	positive = {
+		TokenDelimiter {
+			field = { .Terminator }
+		},
+		TokenOperator {
+			field = { .Equals }
+		}
+	}
+}
+
 expectation_col := Expectation {
 	positive = {
 		TokenOperator {
@@ -98,7 +109,10 @@ expectation_lit_or_ident_or_paren := Expectation {
 		TokenIdentifier {},
 		TokenDelimiter {
 			field = { .ParenL }
-		}
+		},
+		TokenOperator {
+			field = { .Sub }
+		},
 	}
 }
 

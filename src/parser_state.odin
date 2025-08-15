@@ -7,6 +7,7 @@ package holang
 
 import "core:fmt"
 import "core:mem"
+import "core:slice"
 import "core:strings"
 
 // --- Procedures ---
@@ -248,6 +249,23 @@ solve_state :: proc(vm : VM, text : string, state : ^ParserState) -> (err : Erro
 		fmt.println(new_type)
 		return register_type(vm, new_type)
 	
+	// Runtime expression
+	case ExpressionState:
+		
+		defer delete(b.values)
+		
+		// An expression must have a parent state
+		if state.parent == nil do return .Expression_Invalid
+		
+		cmd_alloc := mem.dynamic_arena_allocator(&vm.cmd_arena)
+		
+		#partial switch &parent_body in state.parent.body {
+		case VariableState:
+			parent_body.expression.values = slice.clone(
+				b.values[:], cmd_alloc
+			)
+		}
+	
 	// Constant expression
 	case ConstExpressionState:
 		
@@ -260,7 +278,7 @@ solve_state :: proc(vm : VM, text : string, state : ^ParserState) -> (err : Erro
 		
 		// Must have exactly one value left in values
 		if len(b.values) != 1 do return .Expression_Invalid
-		value := b.values[0].(Variant) or_else nil
+		value := b.values[0].body.(Variant) or_else nil
 		if value == nil do return .Expression_Invalid
 		
 		(state.parent != nil) or_break
@@ -268,7 +286,9 @@ solve_state :: proc(vm : VM, text : string, state : ^ParserState) -> (err : Erro
 		#partial switch &parent_body in state.parent.body {
 		case ConstState:
 			parent_body.value = value
-			
+		
+		case VariableState:
+			parent_body.value = value
 		}
 		
 	case ConstState:
@@ -289,7 +309,11 @@ solve_state :: proc(vm : VM, text : string, state : ^ParserState) -> (err : Erro
 		fmt.println(new_constant)
 		return register_constant(vm, new_constant)
 	
+		
+	
 	case:
+		fmt.println("UNHANDLED STATE POP:")
+		fmt.println(state)
 	}
 	
 	return

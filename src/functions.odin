@@ -7,6 +7,7 @@ package holang
 
 
 // --- Types ---
+FunctionID :: distinct int
 Function :: struct {
 	
 	name : string,

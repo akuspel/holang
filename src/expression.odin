@@ -1,3 +1,4 @@
+#+private
 package holang
 
 /* --- Expressions ---
@@ -9,6 +10,59 @@ package holang
 import "base:intrinsics"
 
 import "core:fmt"
+
+// --- Types ---
+Expression :: struct {
+	
+	// Parsing
+	base_type : TypeID,	// Expression result type, -1 if unknown
+						// Result type is checked during calculation
+						// AND when the value is assigned somewhere
+	
+	
+	
+	// Data
+	values : []ExprVal,
+}
+
+
+ExprVal :: struct {
+	
+	negative : bool,
+	
+	body : union {
+		Operator,				// Mathematical operator
+		ExpressionDelimiter,	// Parentheses
+		
+		ExpressionVariable,		// Constant, Function, Variable, Type (casting)
+		Variant,				// Any constant value
+	},
+}
+
+ExpressionVariable :: struct {
+	
+	type : enum {
+		Variable,	// Standard variable
+		Function,	// Function result
+	},
+	
+	name : string,	// Search by name
+	off  : VarID,	// Get by index
+}
+
+ExpressionDelimiter :: struct {
+	
+	type : enum {
+		Unknown,
+		
+		ParenL,
+		ParenR,
+		
+		TypeCast,
+	},
+	
+	base_type : TypeID,		// Only used when cast
+}
 
 // --- Constants ---
 PRC_SUM :: 11
@@ -50,7 +104,7 @@ operator_precedence := #partial [Operator]int {
 
 
 // --- Procedures ---
-get_precedence :: proc(op : ConstExprVal) -> int {
+get_precedence :: proc(op : union {Operator, Delimiter, Variant}) -> int {
 	switch &t in op {
 	case Operator:	return operator_precedence[t]
 	case Delimiter: return PRC_PR
@@ -199,8 +253,8 @@ cexpr_solve_top :: proc(arr : ^[dynamic]ConstExprVal) -> (err : Error) {
 		top_i := arr_len - 1
 		
 		// Get values or break
-		num1, num2 := arr[top_i - 3].(Variant)	or_break, arr[top_i - 1].(Variant) or_break
-		op1,  op2  := arr[top_i - 2].(Operator) or_break, arr[top_i].(Operator)    or_break
+		num1, num2 := arr[top_i - 3].body.(Variant)	 or_break, arr[top_i - 1].body.(Variant) or_break
+		op1,  op2  := arr[top_i - 2].body.(Operator) or_break, arr[top_i].body.(Operator)    or_break
 		
 		pr1 := get_precedence(op1)
 		pr2 := get_precedence(op2)
@@ -214,8 +268,8 @@ cexpr_solve_top :: proc(arr : ^[dynamic]ConstExprVal) -> (err : Error) {
 		
 		// Add result and first 
 		// Operator to the stack
-		append(arr, result)
-		append(arr, op2)
+		append(arr, ConstExprVal { body = result })
+		append(arr, ConstExprVal { body = op2 })
 	}
 	
 	return nil
@@ -234,33 +288,33 @@ cexpr_solve_value_until_paren :: proc(
 		top   := arr[top_i]
 		
 		// Check for ParenL (opening parentheses)
-		if _, is_paren := top.(Delimiter); is_paren {
+		if _, is_paren := top.body.(Delimiter); is_paren {
 			pop(arr)
 			break
 		}
 		
 		// No Parentheses
 		// Last *must* be a number
-		num2 := top.(Variant) or_else nil
+		num2 := top.body.(Variant) or_else nil
 		if num2 == nil do return .Expression_Invalid
 		
 		// Check second last
 		(num_vals > 1) or_break
-		if _, is_paren := arr[top_i - 1].(Delimiter); is_paren {
+		if _, is_paren := arr[top_i - 1].body.(Delimiter); is_paren {
 			pop(arr); pop(arr) // Double pop
-			append(arr, num2)  // Add number back on top
+			append(arr, ConstExprVal { body = num2 })  // Add number back on top
 			break
 		}
 		
 		// Get operator
-		op := arr[top_i - 1].(Operator) or_else .Unknown
+		op := arr[top_i - 1].body.(Operator) or_else .Unknown
 		if op == .Unknown do return .Expression_Invalid
 		
 		(num_vals > 2) or_break
 		// Situation:
 		// [ ... , NUM1, OP, NUM2]
 		// -> Apply OP on NUM1 and NUM2
-		num1 := arr[top_i - 2].(Variant) or_else nil
+		num1 := arr[top_i - 2].body.(Variant) or_else nil
 		if num1 == nil do return .Expression_Invalid
 		
 		if get_precedence(op) <= 0 do return .Invalid_Operator
@@ -271,8 +325,13 @@ cexpr_solve_value_until_paren :: proc(
 		if result == nil do return .Expression_Invalid
 		
 		// Add result onto stack
-		append(arr, result)
+		append(arr, ConstExprVal { body = result })
 	}
 	
 	return nil
+}
+
+// --  Expression  --
+expr_push_value :: proc(arr : ^[dynamic]ExprVal, val : ExprVal) {
+	append(arr, val)
 }

@@ -1,3 +1,4 @@
+#+private
 package holang
 
 /* --- Parser ---
@@ -32,6 +33,8 @@ ParserStateBody :: union {
 	ExpressionState,
 	ConstExpressionState,
 	
+	FunctionCallState,
+	
 	ParenState,
 	CurlyState,
 	SquareState,
@@ -57,6 +60,7 @@ ConstState :: struct {
 VariableState :: struct {
 	
 	// Parsing
+	inferred : bool,	// Type is inferred
 	phase : enum {
 		Start,	// var
 		Name,	// my_var
@@ -68,8 +72,53 @@ VariableState :: struct {
 	
 	// Data
 	name_token : TokenID,
-	base_type_token : TokenID,
-	value : Variant,
+	base_type  : TypeID,
+	expression : Expression,	// Comptime calculated value
+	value      : Variant,		// Runtime calculated value
+}
+
+FunctionCallState :: struct {
+	
+	phase : enum {
+		Start,    // function
+		ParenL,   // (
+		Ident,	  // a
+		Colon,	  // :
+		Type,	  // int
+		Comma,	  // , (-> back to ident)
+		ParenR,   // )
+		Period,   // .
+		Selector, // return_name
+	},
+	
+	function : FunctionID,
+	selector : Maybe(int), // Which return value is selected
+}
+
+FunctionState :: struct {
+	
+	phase : enum {
+		Start,    // fn
+		Name,	  // my_function
+		Params,   // (
+		Close,	  // )
+		Returns,  // ->
+		TypeS,	  // int
+		TypeM,	  // (a : int, b : bool)
+		Body,	  // {
+		End,	  // }
+	},
+	
+	member : enum {
+		Name,	// a
+		Col,	// :
+		Type,	// int
+	},
+	
+	name_token : TokenID,
+	
+	params  : [dynamic]FunctionArgument,
+	returns : [dynamic]FunctionArgument,
 }
 
 TypeState :: struct {
@@ -102,7 +151,24 @@ TypeState :: struct {
 }
 
 ExpressionState :: struct {
+	// Expression whose syntax is checked during parsing
+	// The final result is calculated runtime, where the
+	// Final type / variable checks happen
+	// 
+	// Creates an Expression object
 	
+	// Parsing
+	depth : int,
+	phase : enum {
+		Start,
+		Value,
+		Function,
+		Operator,
+	},
+	functions : int,	// Keep track of internal calls
+	
+	// Data
+	values : [dynamic] ExprVal
 }
 
 ConstExpressionState :: struct {
@@ -118,12 +184,15 @@ ConstExpressionState :: struct {
 	},
 	
 	// Data
-	value : Variant,
-	values : [dynamic] ConstExprVal,
+	values : [dynamic]ConstExprVal,
 }
 
-@(private)
-ConstExprVal :: union { Variant, Operator, Delimiter }
+ConstExprVal :: struct {
+	
+	negative : bool,
+	
+	body : union { Variant, Operator, Delimiter },
+}
 
 
 StructState :: struct {
@@ -149,7 +218,7 @@ StructState :: struct {
 	},
 	
 	// Data
-	members : [dynamic] [2]TokenID, // {name, type}
+	members : [dynamic][2]TokenID, // {name, type}
 }
 
 ParenState :: struct {
@@ -227,7 +296,7 @@ parse_tokens :: proc(
 			fmt.println(states)
 		}
 		
-		// Clean states (ignore errors)
+		// Clean up states (ignore errors)
 		for len(states) > 0 do pop_state(vm, text, &states)
 	}
 	
@@ -250,7 +319,220 @@ parse_tokens :: proc(
 		a = sub_last; b = sub // Store strings for debug printing
 		
 		#partial switch &s in state.body {
-		case ConstExpressionState:
+		case ExpressionState:
+			succ : bool
+			exp : Expectation
+			
+			expectation_expr_a := Expectation {
+				positive = {
+					TokenIdentifier {
+						// Constant, Function, Variable or Type (cast)
+					},
+					TokenLiteral {
+						// Value
+					},
+					TokenDelimiter {
+						field = { .ParenL }
+					}
+				}
+			}
+			
+			expectation_expr_b := Expectation {
+				positive = {
+					TokenOperator {},
+					TokenDelimiter {}
+					// NOTE: any delimiter that
+					//		 comes after level 0
+					//		 and is NOT a ParenL
+					//		 ends the expression
+				},
+				
+				negative = {
+					TokenDelimiter {
+						field = { .ParenL }
+					}
+				}
+			}
+			
+			switch s.phase {
+			case .Start:
+				// Special case where it can
+				// begin with MINUS operator
+				if b, ok := &next.body.(TokenOperator); ok {
+					if b.type != .Sub do return 0, .Expression_Invalid
+					// MINUS found, append 0 and - to the expression
+					expr_push_value(&s.values, { body = Variant(f64(0)) })
+					expr_push_value(&s.values, { body = b.type })
+					
+					succ = true
+					s.phase = .Operator
+					continue
+				}
+			
+				fallthrough
+				
+			case .Operator:
+				// Expect a constant identifier
+				// Or a literal value
+				
+				exp = expectation_expr_a
+				succ = parse_expectations(
+					next^, exp
+				)
+				
+				succ or_break
+				
+				s.phase = .Value
+				#partial switch &b in next.body {
+				case TokenIdentifier:
+					
+					// Check type
+					switch get_identifier_type(vm, sub) {
+					case .Unknown, .Variable:
+						// Must be a variable
+						
+						var := ExpressionVariable {
+							type = .Variable,
+							name = sub,
+						}
+						
+						expr_push_value(&s.values, ExprVal { body = var })
+					
+					case .Function:
+						
+						// Get function argument count, etc.
+						
+						// TODO: generate function call command
+						// 		 with return variable checking
+						
+						var := ExpressionVariable {
+							type = .Function,
+							off  = VarID(s.functions), // Parsed when popped, off = -s.functions + off
+						};  s.functions += 1
+						
+						expr_push_value(&s.values, ExprVal { body = var })
+						
+						func_id, id_err := get_func_id_by_name(vm, sub)
+						if id_err != nil do return 0, id_err
+						
+						// Parse function expression
+						append_state(&states, FunctionCallState {
+							function = func_id
+						}, i)
+						
+					case .Constant:
+						
+						const_id, id_err := get_const_id_by_name(vm, sub)
+						if id_err != nil do return 0, id_err
+						
+						const, const_err := get_constant(vm, const_id)
+						if const_err != nil do return 0, const_err
+						
+						value := const.value
+						expr_push_value(&s.values, ExprVal { body = value })
+					
+					case .Type:
+						// Type cast
+						type_id, id_err := get_type_id_by_name(vm, sub)
+						if id_err != nil do return 0, id_err
+						
+						delim := ExpressionDelimiter {
+							type = .TypeCast,
+							base_type = type_id,
+						}
+						
+						expr_push_value(&s.values, ExprVal { body = delim })
+					}
+					
+				case TokenLiteral:
+					
+					expr_push_value(&s.values, ExprVal { body = next.value })
+					
+				case TokenDelimiter:
+					
+					delim := ExpressionDelimiter {
+						type = .Unknown,
+					}
+					
+					if b.type == .ParenL do delim.type = .ParenL
+					if b.type == .ParenR do delim.type = .ParenR
+					
+					// Incorrect delimiter type
+					if b.type == .Unknown do return 0, .Expression_Invalid
+					
+					s.depth += 1
+					s.phase = .Start // Override phase
+					expr_push_value(&s.values, ExprVal { body = delim })
+				}
+			
+			case .Function:
+			
+				
+				fallthrough	
+				
+			case .Value:
+				// Expect an operator
+				
+				exp = expectation_expr_b
+				succ = parse_expectations(
+					next^, exp
+				)
+				
+				succ or_break
+				
+				#partial switch &b in next.body {
+				case TokenOperator:
+					
+					// Operator, push
+					s.phase = .Operator
+					expr_push_value(&s.values, ExprVal { body = b.type })
+					
+				case TokenDelimiter:
+					
+					#partial switch b.type {
+					case .ParenR:
+						if s.depth == 0 {
+							
+							// Solve state
+							peek = false // Parent state checks exit
+							pop_err := pop_state(vm, text, &states)
+							if pop_err != nil do return 0, pop_err
+							break
+						}
+						
+						s.depth -= 1
+						s.phase = .Value
+						
+						if b.type != .ParenR do return 0, .Expression_Invalid
+						expr_push_value(&s.values, ExprVal {
+							body = ExpressionDelimiter { type = .ParenR }
+						})
+					
+					case:
+						
+						// IF depth isn't 0, the expression
+						// Has loose ends. No loose ends, Waltuh
+						if s.depth != 0 do return 0, .Expression_Depth
+						
+						// Solve state
+						peek = false // Parent state checks exit
+						pop_err := pop_state(vm, text, &states)
+						if pop_err != nil do return 0, pop_err
+					}
+				}
+			}
+			
+			if !succ {
+				expect_str = print_expectations(exp, temp)
+				return 0, .Token_Unexpected
+			}
+			
+		case ConstExpressionState: // FIN
+			
+			// TODO: if expression starts with -,
+			// 		 append a zero fore appending
+			// 		 the minus operator
+		
 			succ : bool
 			exp : Expectation
 			
@@ -282,10 +564,32 @@ parse_tokens :: proc(
 			}
 			
 			switch s.phase {
-			case .Operator:
+			case .Start:
+				// Special case where it can
+				// begin with MINUS operator
+				fmt.println("ASDASJDASDJKLASJDLKAJSDLÖKAJSÖDLKJASLÖKDJÖALSKDJLÖKASJDÖLKASJD")
+				if b, ok := &next.body.(TokenOperator); ok {
+				}
+				
+				#partial switch &b in next.body {
+				case TokenOperator:
+					fmt.println("NOOOOOOOOOO")
+					if b.type != .Sub do return 0, .Expression_Invalid
+					// MINUS found, append 0 and - to the expression
+					cexpr_push_value(&s.values, { body = Variant(f64(0)) })
+					cexpr_push_value(&s.values, { body = b.type })
+					
+					succ = true
+					s.phase = .Operator
+					continue
+				
+				case:
+					fmt.println("AAAHSDHASDHASH", next.body)
+				}
+				
 				fallthrough
 				
-			case .Start:
+			case .Operator:
 				// Expect a constant identifier
 				// Or a literal value
 				
@@ -308,18 +612,18 @@ parse_tokens :: proc(
 					if const_err != nil do return 0, const_err
 					
 					value := const.value
-					cexpr_push_value(&s.values, value)
+					cexpr_push_value(&s.values, { body = value })
 					
 				case TokenLiteral:
 					
-					cexpr_push_value(&s.values, next.value)
+					cexpr_push_value(&s.values, { body = next.value })
 					
 				case TokenDelimiter:
 					
 					// MUST be a ParenL
 					s.depth += 1
 					s.phase = .Start // Override phase
-					cexpr_push_value(&s.values, b.type)
+					cexpr_push_value(&s.values, { body = b.type })
 				}
 				
 			case .Value:
@@ -337,7 +641,7 @@ parse_tokens :: proc(
 					
 					// Operator, push
 					s.phase = .Operator
-					cexpr_push_value(&s.values, b.type)
+					cexpr_push_value(&s.values, { body = b.type })
 					
 					// Solve available
 					solve_err := cexpr_solve_top(&s.values)
@@ -345,7 +649,7 @@ parse_tokens :: proc(
 					
 				case TokenDelimiter:
 					
-					delim: #partial switch b.type {
+					#partial switch b.type {
 					case .ParenR:
 						if s.depth == 0 {
 							
@@ -383,14 +687,12 @@ parse_tokens :: proc(
 				expect_str = print_expectations(exp, temp)
 				return 0, .Token_Unexpected
 			}
-			
-			// --- Iternal Procedures ---
 		
 		// Constant Definition
 		// NOTE: can only be defined in file scope
 		//		 AKA when depth == 0
 		//		 OR  when state.body == nil
-		case ConstState:
+		case ConstState: // FIN
 			succ : bool
 			exp : Expectation
 			
@@ -452,7 +754,7 @@ parse_tokens :: proc(
 		
 		// Type Definition
 		// NOTE: can only be defined in file scope
-		case TypeState:
+		case TypeState: // FIN
 			succ : bool
 			exp : Expectation
 			
@@ -583,7 +885,7 @@ parse_tokens :: proc(
 				return 0, .Token_Unexpected
 			}
 		
-		case StructState:
+		case StructState: // FIN
 			succ : bool
 			exp : Expectation
 			
@@ -684,7 +986,7 @@ parse_tokens :: proc(
 			
 			
 		// Different sorts of brackets
-		case SquareState:
+		case SquareState: // FIN
 			succ : bool
 			exp : Expectation
 			
@@ -727,6 +1029,121 @@ parse_tokens :: proc(
 				pop_err := pop_state(vm, text, &states)
 				if pop_err != nil do return 0, pop_err
 				
+			}
+			
+			if !succ {
+				expect_str = print_expectations(exp, temp)
+				return 0, .Token_Unexpected
+			}
+		
+		
+		case VariableState:
+			succ : bool
+			exp : Expectation
+			
+			switch s.phase {
+			case .Start:
+				exp = expectation_identifier
+				succ = parse_expectations(
+					next^, exp
+				)
+				
+				succ or_break
+				
+				// Name musn't exist elsewhere
+				// NOTE: this is checked again
+				// 		 during runtime to avoid
+				//		 duplicate variables
+				if get_identifier_type(vm, sub) != .Unknown do return 0, .Invalid_Name
+				
+				s.name_token = token_id(start, i)
+				s.phase = .Name
+				
+				s.base_type = -1 // Invalid type
+			
+			case .Name:
+				exp = expectation_col
+				succ = parse_expectations(
+					next^, exp
+				)
+				
+				succ or_break
+				s.phase = .Col
+			
+			case .Col:
+				exp = expectation_identifier
+				succ = parse_expectations(
+					next^, exp
+				)
+				
+				succ or_break
+				
+				// Check for type
+				if get_identifier_type(vm, sub) != .Type do return 0, .Unknown_Type
+				
+				type_id, id_err := get_type_id_by_name(vm, sub)
+				if id_err != nil do return 0, id_err
+				
+				s.base_type = type_id
+				s.phase = .Type
+			
+			case .Type:
+				exp = expectation_expr_or_end
+				succ = parse_expectations(
+					next^, exp
+				)
+				
+				succ or_break
+				
+				#partial switch &b in next.body {
+				case TokenDelimiter:
+					// Terminator, end
+					
+					pop_err := pop_state(vm, text, &states)
+					if pop_err != nil do return 0, pop_err
+					
+				case TokenOperator:
+					// Equals, expect expression
+					s.phase = .Equals
+				}
+			
+			case .Equals:
+				// TODO: support this syntax
+				// 		 for type inference:
+				// 
+				// var a = Thing {
+				//     ...
+				// }
+				
+				exp = expectation_lit_or_ident_or_paren
+				succ = parse_expectations(
+					next^, exp
+				)
+					
+				// Constant or runtime expression?
+				switch peek_const(vm, text, tokens, i) {
+				case true:
+					// Constant expression, get value
+					append_state(&states, ConstExpressionState {}, i)
+					
+				case false:
+					// Runtime expression, build
+					append_state(&states, ExpressionState {}, i)
+				}
+				
+				peek = false
+				s.phase = .Expr
+			
+			case .Expr:
+				exp = expectation_terminator
+				succ = parse_expectations(
+					next^, exp
+				)
+				
+				succ or_break
+				pop_err := pop_state(vm, text, &states)
+				if pop_err != nil do return 0, pop_err
+			
 			}
 			
 			if !succ {
@@ -828,8 +1245,7 @@ parse_tokens :: proc(
 				
 				// Must be a constant
 				sub := strings.substring(text, next.start, next.end) or_else ""
-				_, const_err := get_const_id_by_name(vm, sub)
-				if const_err != nil do return false
+				(get_identifier_type(vm, sub) == .Constant) or_return
 				
 			case TokenDelimiter:
 				
@@ -984,3 +1400,4 @@ expect :: proc(next : Token, type : Maybe(TokenType), not : bool) -> bool {
 	
 	return match != not
 }
+

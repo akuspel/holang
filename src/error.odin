@@ -57,6 +57,7 @@ VMError :: enum {
 	Unknown_Type,	// Type doesn't exist
 	Unknown_Const,	// Can't get the specific constant
 	Unknown_Var,	// Can't get the spicific variable
+	Unknown_Func,	// Can't get the specific function
 	
 	Invalid_Name,	// Invalid named value name
 	Unknown_Member, // Can't get the member from Array or Struct
@@ -113,4 +114,18 @@ NFError :: union #shared_nil {
 
 InterpreterError :: enum {
 	None,
+	
+	Variable_Invalid,	// Variable doesn't exist
+	Type_Cast_Invalid,	// Unable to cast types
+	Mutating_Immutable, // Trying to modify immutable variable
+	
+	Type_Check_Failure,	// Types don't match
+	Expression_Invalid,	// Expression result is invalid
+	Command_Failure,	// Generic command failure
+	
+	Argument_Mismatch,	// Arguments don't match function call
+	
 }
+
+
+
