@@ -57,6 +57,7 @@
 var actors : ActorArray;
 var string_data : StringBuf;
 
+/*
 var num_actors : uint;
 #const skibidiasa = -3 + 5;
 var skibidi_b : int =  0 - 1 + 3;

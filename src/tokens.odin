@@ -24,6 +24,9 @@ Token :: struct {
 	meta : struct {
 		line_num : int,
 		rune_num : int,
+		
+		// Where does the current line begin
+		line_start : int,
 	}
 }
 
@@ -311,6 +314,7 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 					meta = {
 						line_num,
 						rune_num,
+						0
 					}
 				}
 			}
@@ -332,6 +336,7 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 				meta = {
 					line_num,
 					rune_num,
+					0
 				}
 			}
 			
@@ -472,3 +477,16 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 		return true
 	}
 }
+
+/* --- get_token_string ---
+ * return the string
+ * a given token represents
+ */
+get_token_string :: proc(vm : VM, token : Token) -> (str : string, err : Error) {
+	if vm == nil do return "", .No_VM
+	sub, ok := strings.substring(vm.text, token.start, token.end)
+	if !ok do return "", .Invalid_String
+	
+	return sub, nil
+}
+

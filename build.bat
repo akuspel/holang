@@ -1,2 +1,2 @@
 @echo off
-odin run src -out:bin/holang.exe -debug
+odin run src -out:bin/holang.exe -debug -keep-executable

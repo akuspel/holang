@@ -27,6 +27,7 @@ VirtualMachine :: struct {
 	// Parsing
 	text	: string,
 	tokens	: [dynamic]Token,
+	errors  : [dynamic]ParseErrorMessage,
 	tokenised_to : int, // How far has the text been tokenised
 	parsed_to	 : int, // How far have the tokens been parsed
 	
@@ -87,6 +88,7 @@ vm_destroy :: proc(vm : ^VM) -> (err : Error) {
 	delete(vm^.types)
 	
 	delete(vm^.tokens)
+	delete(vm^.errors)
 	
 	mem.dynamic_arena_destroy(&vm^.cmd_arena)
 	mem.dynamic_arena_destroy(&vm^.type_arena)
@@ -160,12 +162,17 @@ vm_parse_remainder :: proc(vm : VM) -> (err : Error) {
 	if n_tokens  < vm.parsed_to do return .Token_Mismatch
 	if vm.tokenised_to < 0 do return .Token_Mismatch
 	
-	n, p_err := parse_tokens(
-		vm, vm.text, vm.tokens[vm.parsed_to:n_tokens],
-		TokenID(vm.parsed_to)
-	);	if p_err != nil do return p_err
+	// n, p_err := parse_tokens(
+	// 	vm, vm.text, vm.tokens[vm.parsed_to:n_tokens],
+	// 	TokenID(vm.parsed_to)
+	// );	if p_err != nil do return p_err
 	
-	vm.parsed_to += n
+	// vm.parsed_to += n
+	
+	p_err := parse_vm(
+		vm, TokenID(vm.parsed_to)
+	)
+	
 	if vm.parsed_to != n_tokens do return .Token_Mismatch
 	
 	return

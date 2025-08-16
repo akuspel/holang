@@ -178,7 +178,7 @@ ConstExpressionState :: struct {
 	// Parsing
 	depth : int,
 	phase : enum {
-		Start,		// Entered expression
+		Start,		// Entered the expression
 		Value,		// Received value (const identifier or literal)
 		Operator,	// E.G. *
 	},

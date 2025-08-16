@@ -39,7 +39,7 @@ ExternalVariable :: struct {
  */
 Constant :: struct {
 	
-	name : string,
+	name  : string,
 	value : Variant,
 }
 

@@ -63,6 +63,16 @@ expectation_struct_curly := Expectation {
 	}
 }
 
+expectation_ident_or_curly := Expectation {
+	positive = {
+		TokenDelimiter {
+			field = { .CurlyR }
+		},
+		
+		TokenIdentifier {}
+	}
+}
+
 expectation_curly_or_comma := Expectation {
 	positive = {
 		TokenDelimiter {
