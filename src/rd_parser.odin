@@ -89,6 +89,19 @@ get_next_token :: proc(
 	return
 }
 
+/* --- peek_token ---
+ * peeks the next token in line
+ * without moving count forward
+ */
+peek_token :: proc(
+	vm : VM, state : ^ParseState
+) -> (token : Token, ok : bool) {
+	t, err := get_token(vm, state.token + 1)
+	if err != nil do return
+	
+	return t, true
+}
+
 /* --- parser_error_emit ---
  * emits an error during parsing
  * which gets printed with multi
@@ -263,29 +276,86 @@ parse_constant :: proc(vm : VM, state : ^ParseState) -> (err : Error) {
 }
 
 parse_constant_expression :: proc(vm : VM, state : ^ParseState) -> (value : Variant, err : Error) {
-	token, text, token_err := get_next_token(vm, state)
-	if token_err != nil do return nil, token_err
 	
-	// NOTE: we'll do it simple for now
-	//		 and only expect a variant
-	if !parse_expectations(token, {positive = {
-		TokenLiteral { field = { .Number, .Boolean } }
-	}}) {
-		return nil, parser_error_emit(
-			vm, state, .Token_Unexpected,
-			"Expected a literal value"
-		)
+	// EXAMPLE SYNTAX:
+	// MY_CONST + 2 * OTHER_CONST - (1 + 2 + 3)
+	// !MY_BOOL_CONST == !MY_OTHER_BOOL_CONST
+	
+	depth : int 	// Expression depth
+	expr  : PrattExpression
+	defer delete(expr)
+	
+	finished : bool
+	expr_loop: for ;; {
+		token, text, token_err := get_next_token(vm, state)
+		if token_err != nil do return nil, token_err
+		
+		#partial switch &b in token.body {
+		case TokenDelimiter:
+			#partial switch b.type {
+			case .ParenL: depth += 1
+			case .ParenR: depth -= 1
+			case:
+				break expr_loop
+			}
+			
+			append(&expr, b.type)
+			if depth < 0 do break expr_loop
+			
+		case TokenOperator:
+			append(&expr, b.type)
+		
+		case TokenLiteral:
+			if token.value == nil {
+				return nil, parser_error_emit(
+					vm, state, .Invalid_Value,
+					"Expected only valid values in constant expression"
+				)
+			}
+			
+			append(&expr, token.value)
+		
+		case TokenIdentifier:
+			val := const_ident_to_value(vm, text)
+			if val == nil {
+				return nil, parser_error_emit(
+					vm, state, .Unknown_Const,
+					"Unknown constant identifier in constant expression"
+				)
+			}
+			
+			append(&expr, val)
+		
+		case:
+			return nil, parser_error_emit(
+				vm, state, .Token_Unexpected,
+				"Expected only literals, constants, operators or parentheses in constant expression"
+			)
+		}
 	}
 	
-	value = token.value
-	if value == nil {
+	// Unpeek last token
+	state.token -= 1
+	
+	value, err = pratt_parse(&expr, context.temp_allocator)
+	if err != nil {
 		return nil, parser_error_emit(
-			vm, state, .Invalid_Value,
-			"Expected a valid constant value"
+			vm, state, err,
+			"Invalid expression"
 		)
 	}
 	
 	return
+	
+	// --- Internal Procedures ---
+	const_ident_to_value :: proc(vm : VM, name : string) -> Variant {
+		
+		const_id, id_err := get_const_id_by_name(vm, name)
+		const, const_err := get_constant(vm, const_id)
+		
+		if id_err != nil || const_err != nil do return nil
+		return const.value
+	}
 }
 
 // -   Types   -
@@ -400,6 +470,8 @@ parse_type :: proc(vm : VM, state : ^ParseState) -> (err : Error) {
 	if !parse_util_terminator(vm, state) do return .Token_Unexpected
 	
 	// --- Register Type ---
+	if type.body == nil do return .Invalid_Type
+	
 	type.name = identifier
 	fmt.println("Type", identifier, "=", type.body)
 	

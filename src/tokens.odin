@@ -108,7 +108,7 @@ Operator :: enum {
 	GR, GE,
 	
 	// Boolean
-	And, Or,
+	And, Or, Not,
 	
 	// Other stuff
 	Pointer,	// ^
@@ -167,6 +167,7 @@ TOKEN_OPERATOR := [Operator]string {
 	
 	.And = "&&",
 	.Or  = "||",
+	.Not = "!",
 	
 	.Pointer   = "^",
 	.Reference = "&",

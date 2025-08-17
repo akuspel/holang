@@ -100,6 +100,7 @@ operator_precedence := #partial [Operator]int {
 	
 	.And = PRC_BLN,
 	.Or  = PRC_BLN,
+	.Not = PRC_BLN,
 }
 
 
@@ -114,6 +115,39 @@ get_precedence :: proc(op : union {Operator, Delimiter, Variant}) -> int {
 	return 0
 }
 
+prefix_operation :: proc(a : Variant, op : Operator) -> (c : Variant) {
+	if a == nil do return nil
+	if op == .Unknown do return nil
+	
+	switch t in a {
+	case int,
+		uint,
+		byte,
+		uintptr:	return raw_op(    0,   as_int(a), op )
+	
+	case f64:		return raw_op(  0.0, as_float(a), op )
+	case bool: 		return raw_op( true,  as_bool(a), op )
+	}
+	
+	return
+}
+
+postfix_operation :: proc(a : Variant, op : Operator) -> (c : Variant) {
+	if a == nil do return nil
+	if op == .Unknown do return nil
+	
+	switch t in a {
+	case int,
+		uint,
+		byte,
+		uintptr:	return raw_op(   as_int(a),    0, op )
+	
+	case f64:		return raw_op( as_float(a),  0.0, op )
+	case bool: 		return raw_op(  as_bool(a), true, op )
+	}
+	
+	return
+}
 
 operation :: proc(a, b : Variant, op : Operator) -> (c : Variant) {
 	if a == nil || b == nil do return nil //, .Invalid_Value
@@ -227,6 +261,7 @@ raw_op :: proc(
 	
 	case .And: return a && b
 	case .Or:  return a || b
+	case .Not: return !(a && b)
 	}
 	
 	return

@@ -14,6 +14,9 @@
  *	syntax )
  */
 
+#const EXPRESSION_TEST = 2 == !10 * (5 + 12) == 62;
+#const AAA = 1.32 * (1.7 + 14 - 1*2*3 / 3.2) - 5;
+
 // --- Types ---
 #type u8 = unique byte; // Unique Reference to byte, needs a cast to assign <--->
 
@@ -49,8 +52,17 @@
 	_ : u8, // Unnamed members, for alignment purposes
 	pos : Vec2,
 	col : Color,
+	
+	// Horrible idea: Methods!
+	// fn damage <self> (val : uint) {
+	// 	self.health -= val;
+	
 };
 
+// Other method declaration
+// fn set_name <self : Actor> (name : cstring) {
+// 	self.name = name;
+// }
 
 // --- Variables ---
 #type ActorArray = [MAX_ACTORS]Actor;

@@ -94,6 +94,7 @@ ParserError :: enum {
 	
 	Invalid_Operator,	// Invalid operator used in expression
 	Invalid_Value,		// Expected a value, none received
+	Invalid_Type,		// Generated type turned out invalid
 	
 	Constant_Over,		// Trying to override existing constant
 	Variable_Over,		// Trying to override existing
