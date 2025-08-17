@@ -13,7 +13,10 @@ Function :: struct {
 	name : string,
 	
 	arguments : []FunctionArgument,
-	returns   : []FunctionArgument,
+	returns   : Maybe(FunctionArgument),
+	// NOTE: once I have figured out
+	//		 single return values do
+	//		 consider multi returns
 }
 
 FunctionArgument :: struct {

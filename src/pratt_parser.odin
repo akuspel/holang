@@ -22,11 +22,14 @@ PrattNode :: struct {
 	a, b : PrattValue
 }
 
-PrattValue :: union {
-	^PrattNode,
-	Variant,
-	Operator,
-	Delimiter,
+PrattValue :: struct {
+	
+	body : union {
+		^PrattNode,
+		Variant,
+		Operator,
+		Delimiter,
+	},
 }
 
 PrattExpression :: [dynamic]PrattValue
@@ -54,6 +57,9 @@ pratt_parse :: proc(
 	if len(expr^) == 0 do return nil, .Expression_Invalid
 	
 	IDIOT_PRINT :: false
+	// TODO: figure out how to make
+	//		 this recursive instead
+	//		 of looping for forever
 	
 	// Parse until only one node left
 	num : int
@@ -73,7 +79,7 @@ pratt_parse :: proc(
 			
 			when IDIOT_PRINT do fmt.println("Member", i, v)
 			// Check for value or node
-			#partial switch &t in v {
+			#partial switch &t in v.body {
 			case Variant: // Is a value
 			case ^PrattNode:
 			
@@ -81,7 +87,7 @@ pratt_parse :: proc(
 				// Non complete operation
 				switch t.type {
 				case .Infix:
-					if t.a == nil || t.b == nil do continue
+					if t.a.body == nil || t.b.body == nil do continue
 				case .Prefix:  // Must be finished
 				case .Postfix: // Must be finished
 				}
@@ -94,25 +100,25 @@ pratt_parse :: proc(
 			
 			// Precedence
 			PRC_NONE :: -10
-			pl := PRC_NONE if l == nil else 0
-			pr := PRC_NONE if r == nil else 0
+			pl := PRC_NONE if l.body == nil else 0
+			pr := PRC_NONE if r.body == nil else 0
 			
 			PRC_PAREN :: -2 // Wait to solve parentheses
-			if pl != PRC_NONE do #partial switch &t in l {
+			if pl != PRC_NONE do #partial switch &t in l.body {
 			case Operator:   pl = get_precedence(t)
 			case Delimiter:  pl = PRC_PAREN
 			case ^PrattNode:
-				if t.b != nil do return nil, .Expression_Invalid
+				if t.b.body != nil do return nil, .Expression_Invalid
 				pl = get_precedence(t.op)
 			case:
 				return nil, .Expression_Invalid
 			}
 			
-			if pr != PRC_NONE do #partial switch &t in r {
+			if pr != PRC_NONE do #partial switch &t in r.body {
 			case Operator:   pr = get_precedence(t)
 			case Delimiter:  pr = PRC_PAREN
 			case ^PrattNode:
-				if t.a != nil do return nil, .Expression_Invalid
+				if t.a.body != nil do return nil, .Expression_Invalid
 				pr = get_precedence(t.op)
 			case:
 				return nil, .Expression_Invalid
@@ -131,7 +137,7 @@ pratt_parse :: proc(
 			
 			if pr > pl  do join_type = .Right
 			if pl == pr && pl == PRC_PAREN {
-				if l.(Delimiter) == .ParenL && r.(Delimiter) == .ParenR {
+				if l.body.(Delimiter) == .ParenL && r.body.(Delimiter) == .ParenR {
 					join_type = .Remove_Paren
 				} else {
 					// Can't solve this for now!
@@ -142,17 +148,16 @@ pratt_parse :: proc(
 			switch join_type {
 			case .Left:
 				
-				#partial switch &t in l {
+				#partial switch &t in l.body {
 				case Operator:
 					node := pratt_node(alloc)
 					node.b  = v
 					node.op = t
 					
 					if t in prefix_operators  do node.type = .Prefix
-					if t in postfix_operators do node.type = .Postfix
 					
 					ordered_remove(expr, i)
-					expr^[i - 1] = node
+					expr^[i - 1].body = node
 					
 				case ^PrattNode:
 					t.b = v
@@ -161,17 +166,16 @@ pratt_parse :: proc(
 				
 			case .Right:
 				
-				#partial switch &t in r {
+				#partial switch &t in r.body {
 				case Operator:
 					node := pratt_node(alloc)
 					node.a  = v
 					node.op = t
 					
-					if t in prefix_operators  do node.type = .Prefix
 					if t in postfix_operators do node.type = .Postfix
 					
 					ordered_remove(expr, i)
-					expr^[i] = node
+					expr^[i].body = node
 					
 				case ^PrattNode:
 					t.a = v
@@ -202,17 +206,17 @@ pratt_parse :: proc(
 	
 	// Tree has been created, now solve operations
 	pratt_solve_value :: proc(value : PrattValue) -> (result : Variant, err : Error) {
-		#partial switch &t in value {
+		#partial switch &t in value.body {
 		case ^PrattNode:
 			switch t.type {
 			case .Infix:
-				if t.a == nil || t.b == nil do return nil, .Expression_Invalid
+				if t.a.body == nil || t.b.body == nil do return nil, .Expression_Invalid
 				
 				a, b : Variant
-				#partial switch &v in t.a {
+				#partial switch &v in t.a.body {
 				case Variant: a = v
 				case ^PrattNode:
-					ra, a_err := pratt_solve_value(v)
+					ra, a_err := pratt_solve_value({v})
 					if a_err != nil do return nil, a_err
 					
 					a = ra
@@ -220,10 +224,10 @@ pratt_parse :: proc(
 				case: return nil, .Expression_Invalid
 				}
 				
-				#partial switch &v in t.b {
+				#partial switch &v in t.b.body {
 				case Variant: b = v
 				case ^PrattNode:
-					rb, b_err := pratt_solve_value(v)
+					rb, b_err := pratt_solve_value({v})
 					if b_err != nil do return nil, b_err
 					
 					b = rb
@@ -234,13 +238,13 @@ pratt_parse :: proc(
 				result = operation(a, b, t.op)
 				
 			case .Prefix:
-				if t.b == nil do return nil, .Expression_Invalid
+				if t.b.body == nil do return nil, .Expression_Invalid
 				
 				a : Variant
-				#partial switch &v in t.b {
+				#partial switch &v in t.b.body {
 				case Variant: a = v
 				case ^PrattNode:
-					ra, a_err := pratt_solve_value(v)
+					ra, a_err := pratt_solve_value({v})
 					if a_err != nil do return nil, a_err
 					
 					a = ra
@@ -251,13 +255,13 @@ pratt_parse :: proc(
 				result = prefix_operation(a, t.op)
 			
 			case .Postfix:
-				if t.a == nil do return nil, .Expression_Invalid
+				if t.a.body == nil do return nil, .Expression_Invalid
 				
 				a : Variant
-				#partial switch &v in t.a {
+				#partial switch &v in t.a.body {
 				case Variant: a = v
 				case ^PrattNode:
-					ra, a_err := pratt_solve_value(v)
+					ra, a_err := pratt_solve_value({v})
 					if a_err != nil do return nil, a_err
 					
 					a = ra
@@ -295,8 +299,8 @@ pratt_get_surrounding :: proc(
 	l := i - 1
 	r := i + 1
 	
-	left  = (expr^[l] if l < le && l >= 0 else nil)
-	right = (expr^[r] if r < le && r >= 0 else nil)
+	left  = (expr^[l] if l < le && l >= 0 else {})
+	right = (expr^[r] if r < le && r >= 0 else {})
 	
 	return
 }

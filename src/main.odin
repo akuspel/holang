@@ -28,24 +28,6 @@ import "core:fmt"
  */
 main :: proc() {
 	
-	// Example expression
-	// 1.0 + 1.5 * (1.5 + 29.1 * 17.0)
-	expr : PrattExpression
-	append(&expr, Variant(f64(1.0)))
-	append(&expr, Operator.Add)
-	append(&expr, Variant(f64(1.5)))
-	append(&expr, Operator.Mul)
-	append(&expr, Delimiter.ParenL)
-	append(&expr, Variant(f64(1.5)))
-	append(&expr, Operator.Add)
-	append(&expr, Variant(f64(29.1)))
-	append(&expr, Operator.Mul)
-	append(&expr, Variant(f64(17.0)))
-	append(&expr, Delimiter.ParenR)
-	
-	fmt.println(pratt_parse(&expr, context.temp_allocator))
-	
-	// when true do return
 	vm, vm_err := vm_init(1024, 1024)
 	if vm_err != nil do fmt.println(vm_err)
 	

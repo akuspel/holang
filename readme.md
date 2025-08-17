@@ -67,7 +67,7 @@ Example:
 #type Color255 = [4]u8;
 
 #const STRING_BUF_SIZE = 1024;
-#type StringBuf = [STRING_BUF_SIZE]byte;
+#type StringBuf = [STRING_BUF_SIZE + 1]byte;
 #type cstring = ^byte; // Null terminated string
 
 #const MAX_ACTORS = 100;
@@ -103,9 +103,9 @@ var string_data : StringBuf;	// <--- Does Not Work
 var num_actors : uint;
 
 // --- Functions ---
-fn new_actor(name : cstring, pos : Vector2, col : Color255) -> (actor : Actor, id : ActorID) {
+fn new_actor(name : cstring, pos : Vector2, col : Color255) -> (actor : Actor) {
 	if (name == 0) return; // C-like single command execution
-	if (num_actors >= MAX_ACTORS) return Actor {}, ActorID {-1, -1};
+	if (num_actors >= MAX_ACTORS) return Actor {};
 	
 	// Constant expression conditional
 	// No runtime calculation cost (to be or not to be)

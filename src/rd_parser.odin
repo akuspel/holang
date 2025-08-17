@@ -299,11 +299,11 @@ parse_constant_expression :: proc(vm : VM, state : ^ParseState) -> (value : Vari
 				break expr_loop
 			}
 			
-			append(&expr, b.type)
+			append(&expr, PrattValue { b.type })
 			if depth < 0 do break expr_loop
 			
 		case TokenOperator:
-			append(&expr, b.type)
+			append(&expr, PrattValue { b.type })
 		
 		case TokenLiteral:
 			if token.value == nil {
@@ -313,7 +313,7 @@ parse_constant_expression :: proc(vm : VM, state : ^ParseState) -> (value : Vari
 				)
 			}
 			
-			append(&expr, token.value)
+			append(&expr, PrattValue { token.value })
 		
 		case TokenIdentifier:
 			val := const_ident_to_value(vm, text)
@@ -324,7 +324,7 @@ parse_constant_expression :: proc(vm : VM, state : ^ParseState) -> (value : Vari
 				)
 			}
 			
-			append(&expr, val)
+			append(&expr, PrattValue { val })
 		
 		case:
 			return nil, parser_error_emit(
@@ -538,40 +538,27 @@ parse_unique_reference_type :: proc(vm : VM, state : ^ParseState, type : ^Type) 
 }
 
 parse_array_type :: proc(vm : VM, state : ^ParseState, type : ^Type) -> (err : Error) {
-	token, text, token_err := get_next_token(vm, state)
-	if token_err != nil do return token_err
 	
 	// EXAMPLE SYNTAX:
 	// [10]int
 	// [MY_INTEGER_CONSTANT]int
 	
-	// STATE 0: Expect identifier or literal
-	if !parse_expectations(token, expectation_num_or_ident) {
-		return parser_error_emit(
-			vm, state, .Token_Unexpected,
-			"Expected integer literal or -constant identifier in array size declaration"
-		)
-	}
-	
+	// STATE 0: Expect constant expression
 	arr_size : int
-	#partial switch &b in token.body {
-	case TokenLiteral:
-		arr_size = token.value.(int) or_else -1
+	value, value_err := parse_constant_expression(vm, state)
+	if value_err != nil do return value_err
 	
-	case TokenIdentifier:
+	#partial switch t in value {
+	case int,
+		uint,
+		uintptr:
+		arr_size = as_int(value)
 		
-		
-		id, id_err := get_const_id_by_name(vm, text)
-		const, const_err := get_constant(vm, id)
-
-		if id_err != nil || const_err != nil {
-			return parser_error_emit(
-				vm, state, .Unknown_Const,
-				"Expected integer literal or -constant identifier in array size declaration"
-			)
-		}
-		
-		arr_size = const.value.(int) or_else -1
+	case:
+		return parser_error_emit(
+			vm, state, .Expression_Invalid,
+			"Expected an integer constant expression in array size declaration"
+		)
 	}
 	
 	// Check correct size
@@ -583,7 +570,7 @@ parse_array_type :: proc(vm : VM, state : ^ParseState, type : ^Type) -> (err : E
 	}
 	
 	// STATE 1: Expect "]"
-	token, text, token_err = get_next_token(vm, state)
+	token, text, token_err := get_next_token(vm, state)
 	if token_err != nil do return token_err
 	
 	if !parse_expectations(token, expectation_square_close) {
