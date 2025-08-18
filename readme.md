@@ -47,9 +47,9 @@ Example:
  *	  --- NOTE ---
  * the code currently passes*
  * the	Parsing step up 'till
- * // <--- Works Until
+ * // <-- Works Until
  * !!! unless marked with !!!
- * // <--- Doesn't work
+ * // <-- Doesn't work
  * 
  * (* this doesn't mean it does anything,
  *	only that the Parser recognises the
@@ -67,88 +67,91 @@ Example:
 #type Color255 = [4]u8;
 
 #const STRING_BUF_SIZE = 1024;
-#type StringBuf = [STRING_BUF_SIZE + 1]byte;
+#type StringBuf = [STRING_BUF_SIZE + 1]byte; // Extra for null character
 #type cstring = ^byte; // Null terminated string
 
-#const MAX_ACTORS = 100;
-#type ActorID = struct {
-	idx : int,
-	gen : int,
-};
-#type Actor = struct {
-	// Nested Structs
-	// NOTE: the struct type
-	//	   must be defined
-	//	   separately
-	id : ActorID,
-	
-	// Other stuff
-	name : cstring,
-	health : uint,
-	
-	// Data
-	flags : u8,
-	_ : u8, // Unnamed members, for alignment purposes
-	pos : Vec2,
+// --- Struct Stuff ---
+#type Vertex = struct {
+	pos : Vec3,
 	col : Color,
-};
-
-
-// --- Variables ---
-#type ActorArray = [MAX_ACTORS]Actor;
-var actors : ActorArray;		// <--- Does Not Work
-var string_data : StringBuf;	// <--- Does Not Work
-
-// <--- Works Until
-var num_actors : uint;
-
-// --- Functions ---
-fn new_actor(name : cstring, pos : Vector2, col : Color255) -> (actor : Actor) {
-	if (name == 0) return; // C-like single command execution
-	if (num_actors >= MAX_ACTORS) return Actor {};
-	
-	// Constant expression conditional
-	// No runtime calculation cost (to be or not to be)
-	when (MAX_ACTORS < 100) {
-		
-		print("This is a thing!"); // Hopefully I do figure out strings...
-	}
-	
-	// There are NO runtime constants
-	// ( #const is limited to file space )
-	// But you can define immutable variables
-	var test : immutable int = 0b0100;
-	
-	actor.name = name;
-	actor.pos  = pos;
-	actor.col = Color {
-		float(col.r) / 256,
-		float(col.g) / 256,
-		float(col.b) / 256,
-		float(col.a) / 256,
-	}; // Array literal
-	
-	// THOUGHT:
-	// Array (and struct) literals
-	// Must have typename included
-	// So the parser can parse the
-	// Literal based on that, and
-	// After parsing typecheck if
-	// Literal and variable type match!
-	// (happy cat noises)
-	
-	id = ActorID {
-		int(num_actors),
-		0,
-	};
-	
-	return // Automatically return named returns
 }
 
-// Automatically get types from function
-var actor, id = new_actor("Homeshift Boy", Vec2 {2, 3.4}, Color255 {10, 200, 30, 255});
-var second_id = new_actor("Other boy", Vec2 {10, 11}, Color255 {1, 2, 3, 4}).id; // Return selection
-print(actor.name);
+#type Triangle = [3]Vertex;
+#const MAX_TRINGLES = 2048;
+#type TrianleBuff = [MAX_TRIS]Triangle;
+
+#type Mesh = struct {
+	col : Color,
+	
+	n_tris : int,
+	tris : TriangleBuff,
+};
+
+// --- Global Variables ---
+var my_global : int; // Defaults to zero
+var MY_FAKE_CONSTANT : immutable uint = 75;
+
+// Constant expressions are evaluated
+// During the parsing step
+var a : float = 10.0 - 12 / (MAX_TRIANGLES - 512); // Evaluated during parsing
+var b : float = (a + float(MY_FAKE_CONSTANT)) * 2; // Evaluated at runtime
+
+// <-- Works until
+// --- Functions ---
+fn clamp(v : int, min : int, max : int) -> int {
+	if (v < min) return min;
+	if (v > max) return max;
+	return v;
+}
+
+fn max(a : int, b : int) -> (c : int) {
+	c = a;
+	if (b > a) c = b;
+	return; // Auto return named returns
+}
+
+fn new_mesh(tris : int, col : Color255) -> Mesh {
+	
+	var mesh : Mesh;
+	mesh.col = {
+		float(col[0]) / 256,
+		float(col[1]) / 256,
+		float(col[2]) / 256,
+		float(col[3]) / 256,
+	};
+
+	mesh.n_tris = clamp(tris, 0, MAX_TRIANGLES);
+	
+	return mesh;
+}
+
+
+//     Works again -->
+// --- Entry Point ---
+// Execution begins from an entry block, where
+// Defined variables are local to that block,
+// And can't be accessed globally
+entry {
+	var x : int = 1;
+	var y : int = 2;
+	var z : int =
+		-(x + y) * 13 + x * 2 + y;
+
+	// <-- Works until
+	// You can write logic in an entry frame
+	for (z < x + y) {
+		z += 1 + max(x, y);
+		if (mod(z, 2) == 0) {
+			y -= 1;
+		}
+	}
+	
+	print(x, y, z, clamp(z, y, x));
+
+	// If we only want en entry function, we can call
+	// One in an entry block, E.G. entry { main() }
+	var my_mesh = new_mesh(100, { 255, 100, 53, 200 });
+}
 
 // Nice example, say I so myself!
 ```
