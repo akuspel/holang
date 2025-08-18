@@ -18,9 +18,11 @@ TOKEN_KEYWORD := [Keyword]string {
 	.Function	= "fn",
 	.Variable	= "var",
 	
-	.Struct = "struct",
-	.Unique = "unique",
+	.Struct    = "struct",
+	.Unique    = "unique",
 	.Immutable = "immutable",
+	
+	.Entry = "entry",
 }
 
 KEYWORD_EXPECTATIONS := [Keyword]Expectation {
@@ -129,6 +131,14 @@ KEYWORD_EXPECTATIONS := [Keyword]Expectation {
 		positive = {
 			TokenIdentifier {
 				field = { .Unknown, .Type }
+			}
+		}
+	},
+	
+	.Entry = {
+		positive = {
+			TokenDelimiter {
+				field = { .CurlyL }
 			}
 		}
 	}

@@ -24,6 +24,9 @@
 #type Color = Vec4; // Non-unique reference, no casting needed!
 #type Color255 = [4]u8;
 
+// Colors
+var COLOR_RED : immutable int = 10 + 1;
+
 #const STRING_BUF_SIZE = 1024;
 #type StringBuf = [STRING_BUF_SIZE + 1]byte;
 #type cstring = ^byte; // Null terminated string
@@ -66,14 +69,37 @@
 var actors : ActorArray;
 var string_data : StringBuf;
 
-/*
 var num_actors : uint;
 #const skibidiasa = -3 + 5;
 var skibidi_b : int =  0 - 1 + 3;
 var skibidi_a : int = -1 + 3;
+#const AAA = -(1 + 3);
+
+// Entry statement
+entry {
+	
+	var x : int;
+	var y : immutable uint = 12 - 3 + uint(x);
+	
+	
+	
+	
+	// Conditionals
+	// if (a == 1) {
+		
+	// 	var z : int;
+	// 	var h : float = 12.3 * 3.2 + 1.0;
+	// } else {
+		
+	// 	if (b == 2) x = 2;
+	// }
+	
+}
+
 
 // --- Functions ---
 
+/*
 // <--- Works Until
 fn new_actor(name : cstring, pos : Vector2, col : Color255) -> Actor {
 	if (name == 0) return; // C-like single command execution

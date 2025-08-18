@@ -13,14 +13,15 @@ import "core:unicode/utf8"
 @(private)
 VirtualMachine :: struct {
 	
+	// AST Base
+	ast_root : AST_Frame,
+	
 	// Runtime
 	variables : [dynamic]Variable,
 	functions : [dynamic]Function,
 	constants : [dynamic]Constant,
 	
 	types : [dynamic]Type,
-	
-	commands : []Command,
 	
 	scope : int,
 	
@@ -93,7 +94,7 @@ vm_destroy :: proc(vm : ^VM) -> (err : Error) {
 	mem.dynamic_arena_destroy(&vm^.cmd_arena)
 	mem.dynamic_arena_destroy(&vm^.type_arena)
 	
-	vm^.commands = nil
+	// TODO: handle AST memory	
 	
 	free(vm^)
 	vm^ = nil
@@ -113,7 +114,7 @@ vm_reset :: proc(vm : VM) -> (err : Error) {
 	mem.dynamic_arena_free_all(&vm.type_arena)
 	err = stack_reset(vm.stack)
 	
-	vm.commands = nil
+	// TODO: handle AST memory
 	
 	clear(&vm.variables)
 	clear(&vm.functions)
@@ -130,6 +131,16 @@ vm_reset :: proc(vm : VM) -> (err : Error) {
 vm_get_type_allocator :: proc(vm : VM) -> (alloc : mem.Allocator, err : Error) {
 	if vm == nil do return {}, .No_VM
 	return mem.dynamic_arena_allocator(&vm.type_arena), nil
+}
+
+@(private)
+/* --- vm_get_ast_allocator ---
+ * get the dynamic arena allocator
+ * for storing  AST nodes / frames
+ */
+vm_get_ast_allocator :: proc(vm : VM) -> (alloc : mem.Allocator, err : Error) {
+	if vm == nil do return {}, .No_VM
+	return mem.dynamic_arena_allocator(&vm.cmd_arena), nil
 }
 
 /* --- vm_tokenise_remainder ---
@@ -173,7 +184,7 @@ vm_parse_remainder :: proc(vm : VM) -> (err : Error) {
 		vm, TokenID(vm.parsed_to)
 	)
 	
-	if vm.parsed_to != n_tokens do return .Token_Mismatch
+	if vm.parsed_to != n_tokens - 1 do return .Token_Mismatch
 	
 	return
 }

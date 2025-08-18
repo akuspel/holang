@@ -167,3 +167,13 @@ expectation_variable_typedef := Expectation {
 		TokenIdentifier {}
 	}
 }
+
+expectation_variable_type_assign := Expectation {
+	positive = {
+		TokenKeyword {
+			field = { .Immutable }
+		},
+		
+		TokenIdentifier {}
+	}
+}

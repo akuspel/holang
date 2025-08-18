@@ -39,6 +39,7 @@ PrattExpression :: [dynamic]PrattValue
 @(rodata)
 prefix_operators := bit_set[Operator] {
 	.Not,
+	.Sub,
 }
 
 @(rodata)
@@ -280,7 +281,7 @@ pratt_parse :: proc(
 	}
 	
 	result, err = pratt_solve_value(expr^[0])
-	if err != nil    do return
+	if err    != nil do return
 	if result == nil do return nil, .Expression_Invalid
 	return
 }

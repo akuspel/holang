@@ -67,6 +67,8 @@ VMError :: enum {
 	Text_Mismatch,	// Mismatch with text length and tokenisation count
 	Text_Invalid,	// Unable to get substring from text
 	Token_Mismatch, // Mismatch with token amount and parse count
+	
+	Unimplemented,	// Given feature is yet to be implemented
 }
 
 TokeniserError :: enum {
@@ -95,10 +97,15 @@ ParserError :: enum {
 	Invalid_Operator,	// Invalid operator used in expression
 	Invalid_Value,		// Expected a value, none received
 	Invalid_Type,		// Generated type turned out invalid
-	
+	Invalid_Variable,	// Generated variable is invalid
+
 	Constant_Over,		// Trying to override existing constant
 	Variable_Over,		// Trying to override existing
 	Type_Over,			// Trying to override existing
+	Type_Mismatch,		// Types don't match
+	
+	Scope_Incomplete,	// Scope has not been finished
+	EOF,				// File has reached its end
 }
 
 

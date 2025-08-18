@@ -323,6 +323,13 @@ types_can_cast :: proc(vm : VM, a, b : TypeID) -> bool {
 }
 
 @(require_results)
+/* --- get_base_type ---
+ * gets the underlying base type
+ * of a given TypeID
+ *
+ * ignore_unique works through
+ * unique type references
+ */
 get_base_type :: proc(vm : VM, id : TypeID, ignore_unique : bool) -> TypeID {
 	if id < 0 do return -1
 	

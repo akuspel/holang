@@ -63,6 +63,8 @@ Keyword :: enum {
 	Struct,
 	Unique,
 	Immutable,
+	 
+	Entry,
 }
 
 TokenDelimiter :: TokenBody(Delimiter)

@@ -17,6 +17,8 @@ Function :: struct {
 	// NOTE: once I have figured out
 	//		 single return values do
 	//		 consider multi returns
+	
+	ast_root : AST_Frame,
 }
 
 FunctionArgument :: struct {
