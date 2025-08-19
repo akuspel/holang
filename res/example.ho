@@ -16,6 +16,10 @@
 
 // --- Types ---
 #type u8 = unique byte; // Unique Reference to byte, needs a cast to assign <--->
+#type char = byte;
+
+var my_u8 : u8 = 123;
+var cast_test : byte = char(1.0) + 5 - byte(my_u8);
 
 #type Vec2 = [2]float;
 #type Vec3 = [3]float;
@@ -78,6 +82,8 @@ var skibidi_a : int = -1 + 3;
 // Entry statement
 entry {
 	
+	// These variables are local to our entry scope
+	// And can't be called from functions
 	var x : int;
 	var y : immutable uint = 12 - 3 + uint(x);
 	

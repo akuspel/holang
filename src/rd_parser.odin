@@ -120,6 +120,7 @@ peek_token :: proc(
 parser_error_emit :: proc(
 	vm : VM, state : ^ParseState,
 	error : Error, message : string,
+	loc := #caller_location
 	) -> (err : Error) {
 	
 	
@@ -148,6 +149,7 @@ parser_error_emit :: proc(
 	
 	text, text_err := get_token_string(vm, token)
 	fmt.println("Got:", text)
+	when ODIN_DEBUG do fmt.println(loc)
 	
 	append(&vm.errors, ParseErrorMessage {
 		token = token,
@@ -493,6 +495,7 @@ parse_constant_expression :: proc(vm : VM, state : ^ParseState) -> (value : Vari
 parse_expression :: proc(
 	vm : VM, state : ^ParseState,
 	scope : FRAME, type : TypeID,
+	loc := #caller_location
 ) -> (expr : EXPR, err : Error) {
 	
 	// Constant Expression
@@ -507,6 +510,7 @@ parse_expression :: proc(
 		return cexpr, nil
 	}
 	
+	// Type inference
 	base_type : TypeID
 	if type == -1 { // Expression type undefined
 		base_type = get_base_type(
@@ -552,6 +556,7 @@ parse_expression :: proc(
 	parse_expression_content :: proc(
 		vm : VM, state : ^ParseState,
 		scope : FRAME, type : TypeID,
+		loc := #caller_location
 	) -> (expr : []AST_ExpressionValue, err : Error) {
 		// ASSUME TYPE IS THE BASE TYPE OF ITSELF
 		
@@ -682,7 +687,7 @@ parse_expression :: proc(
 						}
 						
 						val, val_err := parse_type_cast_expr(vm, state, scope, base_type)
-						if val_err == nil do return nil, val_err
+						if val_err != nil do return nil, val_err
 						
 						append(&values, val)
 						stage = .Value
@@ -764,7 +769,9 @@ parse_expression :: proc(
 				case TokenDelimiter:
 					#partial switch b.type {
 					case .ParenR:
-						if depth == 0 do break expr_loop
+						if depth == 0 {
+							break expr_loop
+						}
 						
 						depth -= 1
 						append(&values, Delimiter.ParenR)
@@ -918,7 +925,8 @@ parse_expression :: proc(
 	
 	parse_type_cast_expr :: proc(
 		vm : VM, state : ^ParseState,
-		scope : FRAME, type : TypeID
+		scope : FRAME, type : TypeID,
+		loc := #caller_location
 	) -> (cast_val : AST_ExpressionValue, err : Error) {
 		
 		// STAGE 0: Expect "("
@@ -1596,7 +1604,7 @@ parse_util_equals :: proc(vm : VM, state : ^ParseState, $M : string) -> bool {
 	return true
 }
 
-parse_util_terminator :: proc(vm : VM, state : ^ParseState) -> bool {
+parse_util_terminator :: proc(vm : VM, state : ^ParseState, loc := #caller_location) -> bool {
 	token, text, token_err := get_next_token(vm, state)
 	if token_err != nil do return false
 	
@@ -1605,6 +1613,7 @@ parse_util_terminator :: proc(vm : VM, state : ^ParseState) -> bool {
 			vm, state, .Token_Unexpected,
 			"Expected \";\" at the end of the statement"
 		)
+		when ODIN_DEBUG do fmt.println(loc)
 		
 		return false
 	}
@@ -1645,13 +1654,17 @@ parse_peek_expr_first_type :: proc(vm : VM, scope : FRAME, start : TokenID) -> T
 		}
 	}
 	
-	depth : int
+	depth   : int
+	literal : Variant
 	search: for i in start..<TokenID(len(vm.tokens)) {
 		next := vm.tokens[i]
 		
 		parse_expectations(next, exp) or_break
 		// Matches
 		#partial switch &b in next.body {
+		case TokenLiteral:
+			literal = next.value
+			
 		case TokenIdentifier:
 			
 			// Must be a constant
@@ -1686,6 +1699,22 @@ parse_peek_expr_first_type :: proc(vm : VM, scope : FRAME, start : TokenID) -> T
 		}
 	}
 	
+	switch t in literal {
+	case bool:
+		type, err := get_type_id_by_name(vm, "bool")
+		return type
+	
+	case int,
+		uint,
+		uintptr,
+		byte:
+		type, err := get_type_id_by_name(vm, "int")
+		return type
+	
+	case f64:
+		type, err := get_type_id_by_name(vm, "float")
+		return type
+	}
 	return -1
 }
 
