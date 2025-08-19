@@ -29,27 +29,38 @@ AST_Expression :: struct {
 	
 	type : TypeID,
 	
-	body : union {
-		AST_ConstantValue,
-		AST_RuntimeExpression,
-		AST_StructArrayLiteral,
-		AST_MemoryAddress,
-	},
+	body : AST_ExpressionBody,
 	
 	meta : struct {
 		token : TokenID,
 	}
 }
 
+AST_ExpressionBody :: union {
+	AST_ConstantValue,
+	AST_RuntimeExpression,
+	AST_MemoryAddress,
+	AST_StructLiteral,
+	AST_ArrayLiteral,
+}
+
 AST_ConstantValue :: struct {
 	value : Variant,
 }
 
-AST_StructArrayLiteral :: struct {
-	values : [] struct {
+AST_StructLiteral :: struct {
+	values : []struct {
 		idx : int,
-		val : ^AST_Expression,
+		val : EXPR,
 	}
+}
+
+AST_ArrayLiteral :: struct {
+	values : []AST_ArrayMember,
+}
+
+AST_ArrayMember :: struct {
+	val : EXPR,
 }
 
 AST_MemoryAddress :: struct {

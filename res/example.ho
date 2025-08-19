@@ -96,6 +96,13 @@ entry {
 	actors[10 + AAA].id.idx =
 		10 + (actors[12 - AAA].id.idx * 3);
 	
+	var my_vec : Vec4 = Vec4 {
+		1, 2, 3 * (5.1 + float(x)), 4
+	};
+	
+	my_vec = {
+		0, 0, 0, 1,
+	};
 	
 	// Conditionals
 	// if (a == 1) {

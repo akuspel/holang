@@ -506,11 +506,36 @@ parse_variable_op :: proc(
 		case ArrayBody:
 			assert(stage == .Value, "Incorrect stage in array variable member parsing")
 			
-			// STAGE 0: Expect "["
-			if !parse_util_single_token(
-				vm, state, TokenDelimiter { type = .SquareL },
-				"Expected \"[\" after array variable"
-			) { return .Expression_Invalid }
+			// STAGE 0: Expect "[" or "="
+			expectation_arr := Expectation {
+				positive = {
+					TokenDelimiter {
+						field = { .SquareL }
+					},
+					
+					TokenOperator {
+						field = { .Equals }
+					}
+				}
+			}
+			
+			token, text, token_err := get_next_token(vm, state)
+			if token_err != nil do return token_err
+			
+			if !parse_expectations(token, expectation_arr) {
+				return parser_error_emit(
+					vm, state, .Token_Unexpected,
+					"Expected \"[\" or \"=\" after array variable"
+				)
+			}
+			
+			#partial switch &b in token.body {
+			case TokenDelimiter:
+			case TokenOperator:
+				break parse_loop
+			
+			case: unreachable()
+			}
 			
 			// STAGE 1: Expect index
 			// !!! TODO !!! make indexing work
@@ -735,19 +760,24 @@ parse_constant_expression :: proc(vm : VM, state : ^ParseState) -> (value : Vari
 parse_expression :: proc(
 	vm : VM, state : ^ParseState,
 	scope : FRAME, type : TypeID,
+	from  : EXPR = nil, // Optional parent expr
 	loc := #caller_location
 ) -> (expr : EXPR, err : Error) {
+	// If from is a valid EXPR
+	// No AST_Expression shall
+	// Be allocated
+	expr = from
 	
 	// Constant Expression
 	if parse_peek_const(vm, state.token) {
 		const, const_err := parse_constant_expression(vm, state)
 		if const_err != nil do return nil, const_err
 		
-		cexpr, expr_err := ast_allocate_expr(vm, state)
-		if expr_err != nil do return nil, expr_err
+		if expr == nil do expr, err = ast_allocate_expr(vm, state)
+		if err != nil do return nil, err
 		
-		cexpr.body = AST_ConstantValue { value = const }
-		return cexpr, nil
+		expr.body = AST_ConstantValue { value = const }
+		return
 	}
 	
 	// Type inference
@@ -767,447 +797,628 @@ parse_expression :: proc(
 	}
 	
 	// Runtime Expression
-	type_body, type_err := get_type(vm, base_type)
+	type_body, type_err := 
+		get_type(vm, get_base_type(vm, base_type, true))
+		// Must ignore unique to get true base
 	#partial switch &b in type_body.body {
-	case StructBody,
-		ArrayBody:
+	case StructBody:
 		return nil, parser_error_emit(
 			vm, state, .Unimplemented,
 			"Expressions not yet implemented for given types"
 		)
 		
+	case ArrayBody:
+		arr_lit, arr_err := parse_array_expr(vm, state, scope, base_type)
+		if arr_err != nil do return nil, arr_err
+		
+		if expr == nil do expr, err = ast_allocate_expr(vm, state)
+		assert(err == nil, "Unable to allocate expression")
+		
+		expr.body = arr_lit
+		
 	case:
 		values, value_err := parse_expression_content(vm, state, scope, base_type)
 		if value_err != nil do return nil, value_err
 		
-		expr, err = ast_allocate_expr(vm, state)
+		if expr == nil do expr, err = ast_allocate_expr(vm, state)
 		assert(err == nil, "Unable to allocate expression")
 		
 		expr.body = AST_RuntimeExpression {
 			values = values
 		}
-		
-		expr.type = base_type
+	
+	case ReferenceBody: unreachable()
 	}
 	
-	return
+	// Universal assignments
+	expr.type = base_type
 	
-	// --- Internal Variables ---
-	parse_expression_content :: proc(
-		vm : VM, state : ^ParseState,
-		scope : FRAME, type : TypeID,
-		loc := #caller_location
-	) -> (expr : []AST_ExpressionValue, err : Error) {
-		// ASSUME TYPE IS THE BASE TYPE OF ITSELF
+	return
+}
+	
+parse_expression_content :: proc(
+	vm : VM, state : ^ParseState,
+	scope : FRAME, type : TypeID,
+	loc := #caller_location
+) -> (expr : []AST_ExpressionValue, err : Error) {
+	// ASSUME TYPE IS THE BASE TYPE OF ITSELF
+	
+	alloc, alloc_err := vm_get_ast_allocator(vm)
+	if alloc_err != nil do return nil, alloc_err
+	
+	stage : enum {
+		Start,
+		Value,
+		Prefix,
+		Postfix,
+		Operator,
+	}
+	
+	values : [dynamic]AST_ExpressionValue
+	defer delete(values)
+	
+	depth : int
+	expr_loop: for ;; {
+		token, text, token_err := get_next_token(vm, state)
+		if token_err != nil do return nil, token_err
 		
-		alloc, alloc_err := vm_get_ast_allocator(vm)
-		if alloc_err != nil do return nil, alloc_err
+		switch stage {
+		case .Start, .Operator, .Prefix:
+			// Can be:
+			// - prefix operator
+			// - literal
+			// - identifier
+			//     * constant
+			//     * variable
+			//     * type (cast)
+			//     * function !!! SKIP FOR NOW !!!
+			// - left parentheses
 		
-		stage : enum {
-			Start,
-			Value,
-			Prefix,
-			Postfix,
-			Operator,
-		}
-		
-		values : [dynamic]AST_ExpressionValue
-		defer delete(values)
-		
-		depth : int
-		expr_loop: for ;; {
-			token, text, token_err := get_next_token(vm, state)
-			if token_err != nil do return nil, token_err
-			
-			switch stage {
-			case .Start, .Operator, .Prefix:
-				// Can be:
-				// - prefix operator
-				// - literal
-				// - identifier
-				//     * constant
-				//     * variable
-				//     * type (cast)
-				//     * function !!! SKIP FOR NOW !!!
-				// - left parentheses
-			
-				expectation_start := Expectation {
-					positive = {
-						TokenDelimiter {
-							field = { .ParenL }
-						},
-						
-						TokenOperator {},
-						TokenLiteral {},
-						TokenIdentifier {}
-					}
+			expectation_start := Expectation {
+				positive = {
+					TokenDelimiter {
+						field = { .ParenL }
+					},
+					
+					TokenOperator {},
+					TokenLiteral {},
+					TokenIdentifier {}
 				}
-				
-				if !parse_expectations(token, expectation_start) {
+			}
+			
+			if !parse_expectations(token, expectation_start) {
+				return nil, parser_error_emit(
+					vm, state, .Token_Unexpected,
+					"Invalid expression"
+				)
+			}
+			
+			#partial switch &b in token.body {
+			case TokenOperator:
+				if stage == .Prefix {
 					return nil, parser_error_emit(
 						vm, state, .Token_Unexpected,
 						"Invalid expression"
 					)
 				}
 				
-				#partial switch &b in token.body {
-				case TokenOperator:
-					if stage == .Prefix {
+				if b.type not_in prefix_operators {
+					return nil, parser_error_emit(
+						vm, state, .Token_Unexpected,
+						"Given operator is not a prefix"
+					)
+				}
+				
+				append(&values, b.type)
+				stage = .Prefix
+				
+			case TokenDelimiter:
+				// Parentheses
+				depth += 1
+				append(&values, Delimiter.ParenL)
+				stage = .Start
+			
+			case TokenLiteral:
+				if token.value == nil do return nil, .Expression_Invalid
+				
+				append(&values, token.value)
+				stage = .Value
+			
+			case TokenIdentifier:
+				
+				// Get identifier type
+				#partial switch get_identifier_type(vm, text) {
+				case .Function:
+					// !!! TODO !!! fix this
+					return nil, parser_error_emit(
+						vm, state, .Unimplemented,
+						"Function calls in expression aren't implemented yet"
+					)
+				
+				case .Constant:
+					// Get constant value
+					const_id, id_err := get_const_id_by_name(vm, text)
+					const, const_err := get_constant(vm, const_id)
+					
+					if const_err != nil || id_err != nil {
 						return nil, parser_error_emit(
-							vm, state, .Token_Unexpected,
+							vm, state, .Expression_Invalid,
+							"Expected only valid constants in expression"
+						)
+					}
+					
+					append(&values, const.value)
+					stage = .Value
+					
+				case .Type:
+					// Get base type
+					type_id, id_err := get_type_id_by_name(vm, text)
+					base_type := get_base_type(vm, type_id, false)
+					
+					if base_type == -1 || id_err != nil {
+						return nil, parser_error_emit(
+							vm, state, .Expression_Invalid,
+							"Expected only valid type casts in expression"
+						)
+					}
+					
+					if base_type != type {
+						return nil, parser_error_emit(
+							vm, state, .Type_Mismatch,
+							"Types don't match in expression"
+						)
+					}
+					
+					val, val_err := parse_type_cast_expr(vm, state, scope, base_type)
+					if val_err != nil do return nil, val_err
+					
+					append(&values, val)
+					stage = .Value
+					
+				case:
+					// Must be a variable
+					
+					var_id, var, found := parse_var_id(scope, text)
+					if !found {
+						return nil, parser_error_emit(
+							vm, state, .Expression_Invalid,
+							"Expected only valid identifiers in expression"
+						)
+					}
+					
+					val, val_err := parse_var_expr(vm, state, scope, type, var_id, var.type)
+					if val_err != nil do return nil, val_err
+					
+					append(&values, val)
+					stage = .Value
+				}
+			
+			case: unreachable()
+			}
+		
+		case .Value, .Postfix:
+			// Can be:
+			// - operator
+			//     * normal
+			//     * postfix
+			// - delimiter (right paren, else close)
+			
+			expectation_value := Expectation {
+				positive = {
+					TokenOperator {},
+					TokenDelimiter {}
+				},
+				
+				negative = {
+					TokenDelimiter {
+						field = { .ParenL }
+					}
+				}
+			}
+			
+			if !parse_expectations(token, expectation_value) {
+				return nil, parser_error_emit(
+					vm, state, .Token_Unexpected,
+					"Expected an operator or \")\" in expression"
+				)
+			}
+			
+			#partial switch &b in token.body {
+			case TokenOperator:
+				if get_precedence(b.type) == 0 {
+					return nil, parser_error_emit(
+						vm, state, .Token_Unexpected,
+						"Expected a valid operator in expression"
+					)
+				}
+				
+				append(&values, b.type)
+				
+				if b.type in postfix_operators {
+					if stage == .Postfix {
+						return nil, parser_error_emit(
+							vm, state, .Expression_Invalid,
 							"Invalid expression"
 						)
 					}
 					
-					if b.type not_in prefix_operators {
-						return nil, parser_error_emit(
-							vm, state, .Token_Unexpected,
-							"Given operator is not a prefix"
-						)
-					}
+					stage = .Postfix
 					
-					append(&values, b.type)
-					stage = .Prefix
+				} else {
 					
-				case TokenDelimiter:
-					// Parentheses
-					depth += 1
-					append(&values, Delimiter.ParenL)
-					stage = .Start
-				
-				case TokenLiteral:
-					if token.value == nil do return nil, .Expression_Invalid
-					
-					append(&values, token.value)
-					stage = .Value
-				
-				case TokenIdentifier:
-					
-					// Get identifier type
-					#partial switch get_identifier_type(vm, text) {
-					case .Function:
-						// !!! TODO !!! fix this
-						return nil, parser_error_emit(
-							vm, state, .Unimplemented,
-							"Function calls in expression aren't implemented yet"
-						)
-					
-					case .Constant:
-						// Get constant value
-						const_id, id_err := get_const_id_by_name(vm, text)
-						const, const_err := get_constant(vm, const_id)
-						
-						if const_err != nil || id_err != nil {
-							return nil, parser_error_emit(
-								vm, state, .Expression_Invalid,
-								"Expected only valid constants in expression"
-							)
-						}
-						
-						append(&values, const.value)
-						stage = .Value
-						
-					case .Type:
-						// Get base type
-						type_id, id_err := get_type_id_by_name(vm, text)
-						base_type := get_base_type(vm, type_id, false)
-						
-						if base_type == -1 || id_err != nil {
-							return nil, parser_error_emit(
-								vm, state, .Expression_Invalid,
-								"Expected only valid type casts in expression"
-							)
-						}
-						
-						if base_type != type {
-							return nil, parser_error_emit(
-								vm, state, .Type_Mismatch,
-								"Types don't match in expression"
-							)
-						}
-						
-						val, val_err := parse_type_cast_expr(vm, state, scope, base_type)
-						if val_err != nil do return nil, val_err
-						
-						append(&values, val)
-						stage = .Value
-						
-					case:
-						// Must be a variable
-						
-						var_id, var, found := parse_var_id(scope, text)
-						if !found {
-							return nil, parser_error_emit(
-								vm, state, .Expression_Invalid,
-								"Expected only valid identifiers in expression"
-							)
-						}
-						
-						val, val_err := parse_var_expr(vm, state, scope, type, var_id, var.type)
-						if val_err != nil do return nil, val_err
-						
-						append(&values, val)
-						stage = .Value
-					}
-				
-				case: unreachable()
-				}
-			
-			case .Value, .Postfix:
-				// Can be:
-				// - operator
-				//     * normal
-				//     * postfix
-				// - delimiter (right paren, else close)
-				
-				expectation_value := Expectation {
-					positive = {
-						TokenOperator {},
-						TokenDelimiter {}
-					},
-					
-					negative = {
-						TokenDelimiter {
-							field = { .ParenL }
-						}
-					}
+					stage = .Operator
 				}
 				
-				if !parse_expectations(token, expectation_value) {
-					return nil, parser_error_emit(
-						vm, state, .Token_Unexpected,
-						"Expected an operator or \")\" in expression"
-					)
-				}
-				
-				#partial switch &b in token.body {
-				case TokenOperator:
-					if get_precedence(b.type) == 0 {
-						return nil, parser_error_emit(
-							vm, state, .Token_Unexpected,
-							"Expected a valid operator in expression"
-						)
-					}
-					
-					append(&values, b.type)
-					
-					if b.type in postfix_operators {
-						if stage == .Postfix {
-							return nil, parser_error_emit(
-								vm, state, .Expression_Invalid,
-								"Invalid expression"
-							)
-						}
-						
-						stage = .Postfix
-						
-					} else {
-						
-						stage = .Operator
-					}
-					
-				case TokenDelimiter:
-					#partial switch b.type {
-					case .ParenR:
-						if depth == 0 {
-							break expr_loop
-						}
-						
-						depth -= 1
-						append(&values, Delimiter.ParenR)
-						stage = .Value
-					
-					case:
-						if depth != 0 {
-							return nil, parser_error_emit(
-								vm, state, .Expression_Depth,
-								"Expression parentheses don't match"
-							)
-						}
-					
+			case TokenDelimiter:
+				#partial switch b.type {
+				case .ParenR:
+					if depth == 0 {
 						break expr_loop
 					}
+					
+					depth -= 1
+					append(&values, Delimiter.ParenR)
+					stage = .Value
+				
+				case:
+					if depth != 0 {
+						return nil, parser_error_emit(
+							vm, state, .Expression_Depth,
+							"Expression parentheses don't match"
+						)
+					}
+				
+					break expr_loop
 				}
 			}
 		}
-		
-		// Backtrack one token
-		state.token -= 1
-		
-		expr, err = slice.clone(values[:], alloc)
-		assert(err == nil, "Failed to clone expression slice")
-	
-		return
 	}
 	
-	parse_var_expr :: proc(
-		vm : VM, state : ^ParseState,
-		scope : FRAME, type : TypeID, var : VarID, var_type : TypeID
-	) -> (var_val : AST_VarExpr, err : Error) {
+	// Backtrack one token
+	state.token -= 1
+	
+	expr, err = slice.clone(values[:], alloc)
+	assert(err == nil, "Failed to clone expression slice")
+
+	return
+}
+
+parse_var_expr :: proc(
+	vm : VM, state : ^ParseState,
+	scope : FRAME, type : TypeID, var : VarID, var_type : TypeID
+) -> (var_val : AST_VarExpr, err : Error) {
+	
+	res_type := var_type
+	off   : uintptr
+	stage : enum {
+		Value,
+		Selector
+	}
+	
+	select_loop: for ;; {
+		base_type := get_base_type(vm, res_type, false)
+		res_type = base_type
+		if base_type == type && stage == .Value do break // Found correct depth
 		
-		res_type := var_type
-		off   : uintptr
-		stage : enum {
-			Value,
-			Selector
-		}
+		type_body, type_err := get_type(vm, base_type)
+		#partial switch &b in type_body.body {
+		case StructBody:
 		
-		select_loop: for ;; {
-			base_type := get_base_type(vm, res_type, false)
-			res_type = base_type
-			if base_type == type && stage == .Value do break // Found correct depth
-			
-			type_body, type_err := get_type(vm, base_type)
-			#partial switch &b in type_body.body {
-			case StructBody:
-			
-				switch stage {
-				case .Value:
-					if !parse_util_single_token(
-						vm, state, TokenDelimiter { type = .Period },
-						"Expected selector for struct variable expression"
-					) { return {}, .Expression_Invalid }
-					stage = .Selector
-				
-				case .Selector:
-					// Expect a member identifier
-					
-					token, text, token_err := get_next_token(vm, state)
-					if token_err != nil do return {}, token_err
-					
-					if text == "" || text == "_" {
-						return {}, parser_error_emit(
-							vm, state, .Unknown_Member,
-							"Invalid struct member identifier"
-						)
-					}
-					
-					// Find correct member
-					idx := -1; for m, i in b.members {
-						(m.name == text) or_continue
-						
-						idx = i
-						break
-					}
-					
-					if idx == -1 {
-						return {}, parser_error_emit(
-							vm, state, .Unknown_Member,
-							"Invalid struct member identifier"
-						)
-					}
-					
-					// Apply changes
-					member  := b.members[idx]
-					res_type = member.base_type 
-					off     += member.offset
-					
-					stage = .Value
-				}
-				
-			case ArrayBody:
-				assert(stage == .Value, "Incorrect stage in array variable member parsing")
-				
-				// STAGE 0: Expect "["
+			switch stage {
+			case .Value:
 				if !parse_util_single_token(
-					vm, state, TokenDelimiter { type = .SquareL },
-					"Expected \"[\" after array variable"
+					vm, state, TokenDelimiter { type = .Period },
+					"Expected selector for struct variable expression"
 				) { return {}, .Expression_Invalid }
+				stage = .Selector
+			
+			case .Selector:
+				// Expect a member identifier
 				
-				// STAGE 1: Expect index
-				// !!! TODO !!! make indexing work
-				// 				with variables too
-				val, val_err := parse_constant_expression(vm, state)
-				if val_err != nil do return {}, val_err
+				token, text, token_err := get_next_token(vm, state)
+				if token_err != nil do return {}, token_err
 				
-				idx := as_int(val)
-				// Compile time bounds check
-				if idx < 0 || idx >= b.size {
+				if text == "" || text == "_" {
 					return {}, parser_error_emit(
-						vm, state, .Bounds_Check,
-						"Given index doesn't fit within bounds of the array"
+						vm, state, .Unknown_Member,
+						"Invalid struct member identifier"
 					)
 				}
 				
-				single_offset := mem.align_forward_int(b.size, b.align)
-				multi_offset  := idx * single_offset
+				// Find correct member
+				idx := -1; for m, i in b.members {
+					(m.name == text) or_continue
+					
+					idx = i
+					break
+				}
 				
-				off += uintptr(multi_offset)
-				res_type = b.base_type
+				if idx == -1 {
+					return {}, parser_error_emit(
+						vm, state, .Unknown_Member,
+						"Invalid struct member identifier"
+					)
+				}
 				
-				// STAGE 2: Expect "]"
-				if !parse_util_single_token(
-					vm, state, TokenDelimiter { type = .SquareR },
-					"Expected \"]\" after array index selector"
-				) { return {}, .Expression_Invalid }
+				// Apply changes
+				member  := b.members[idx]
+				res_type = member.base_type 
+				off     += member.offset
 				
-			case:
+				stage = .Value
+			}
+			
+		case ArrayBody:
+			assert(stage == .Value, "Incorrect stage in array variable member parsing")
+			
+			// STAGE 0: Expect "["
+			if !parse_util_single_token(
+				vm, state, TokenDelimiter { type = .SquareL },
+				"Expected \"[\" after array variable"
+			) { return {}, .Expression_Invalid }
+			
+			// STAGE 1: Expect index
+			// !!! TODO !!! make indexing work
+			// 				with variables too
+			val, val_err := parse_constant_expression(vm, state)
+			if val_err != nil do return {}, val_err
+			
+			idx := as_int(val)
+			// Compile time bounds check
+			if idx < 0 || idx >= b.size {
 				return {}, parser_error_emit(
-					vm, state, .Type_Mismatch,
-					"Variable and expression type don't match"
+					vm, state, .Bounds_Check,
+					"Given index doesn't fit within bounds of the array"
 				)
 			}
 			
+			single_offset := mem.align_forward_int(b.size, b.align)
+			multi_offset  := idx * single_offset
+			
+			off += uintptr(multi_offset)
+			res_type = b.base_type
+			
+			// STAGE 2: Expect "]"
+			if !parse_util_single_token(
+				vm, state, TokenDelimiter { type = .SquareR },
+				"Expected \"]\" after array index selector"
+			) { return {}, .Expression_Invalid }
+			
+		case:
+			return {}, parser_error_emit(
+				vm, state, .Type_Mismatch,
+				"Variable and expression type don't match"
+			)
 		}
 		
-		// Build result
-		var_val.var  = var
-		var_val.off  = off
-		var_val.type = type
-		
-		return
 	}
 	
-	parse_type_cast_expr :: proc(
-		vm : VM, state : ^ParseState,
-		scope : FRAME, type : TypeID,
-		loc := #caller_location
-	) -> (cast_val : AST_ExpressionValue, err : Error) {
+	// Build result
+	var_val.var  = var
+	var_val.off  = off
+	var_val.type = type
+	
+	return
+}
+
+parse_type_cast_expr :: proc(
+	vm : VM, state : ^ParseState,
+	scope : FRAME, type : TypeID,
+	loc := #caller_location
+) -> (cast_val : AST_ExpressionValue, err : Error) {
+	
+	// STAGE 0: Expect "("
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenL },
+		"Expected \"(\" in type cast expression"
+	) { return {}, .Token_Unexpected }
+	
+	// STAGE 1: Expect expression
+	expr : AST_Expression; expr_err : Error
+	_, expr_err  = parse_expression(vm, state, scope, -1, &expr)
+	if expr_err != nil do return {}, expr_err
+	
+	// STAGE 2: Expect ")"
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenR },
+		"Expected \")\" to close type cast expression"
+	) { return {}, .Token_Unexpected }
+	
+	#partial switch &b in expr.body {
+	case AST_ConstantValue:
+	
+		// Constants don't need casting
+		return b.value, nil
 		
-		// STAGE 0: Expect "("
-		if !parse_util_single_token(
-			vm, state, TokenDelimiter { type = .ParenL },
-			"Expected \"(\" in type cast expression"
-		) { return {}, .Token_Unexpected }
-		
-		// STAGE 1: Expect expression
-		expr, expr_err := parse_expression(vm, state, scope, -1)
-		if expr_err != nil do return {}, expr_err
-		
-		// STAGE 2: Expect ")"
-		if !parse_util_single_token(
-			vm, state, TokenDelimiter { type = .ParenR },
-			"Expected \")\" to close type cast expression"
-		) { return {}, .Token_Unexpected }
-		
-		#partial switch &b in expr.body {
-		case AST_ConstantValue:
-		
-			// Constants don't need casting
-			return b.value, nil
+	case AST_RuntimeExpression:
+	
+		if !types_can_cast(vm, expr.type, type) {
+			return {}, parser_error_emit(
+				vm, state, .Type_Mismatch,
+				"Given types can't be cast to each other"
+			)
+		}
+	
+		// Construct Cast Expression
+		return AST_CastExpr {
+			values = b.values,
+			type = type
+		}, nil
+	
+	case:
+		// This *should* ?? be unreachable
+		unreachable()
+	}
+	
+	return
+}
+
+parse_array_expr :: proc(
+	vm : VM, state : ^ParseState,
+	scope : FRAME, type : TypeID,
+	loc := #caller_location
+) -> (arr_val : AST_ExpressionBody, err : Error) {
+	token, text, token_err := get_next_token(vm, state)
+	if token_err != nil do return nil, token_err
+	
+	// STAGE 0: Expect type or "{"
+	expectation_start := Expectation {
+		positive = {
+			TokenDelimiter {
+				field = { .CurlyL }
+			},
 			
-		case AST_RuntimeExpression:
+			TokenIdentifier {}
+		}
+	}
+	
+	if !parse_expectations(token, expectation_start) {
+		return nil, parser_error_emit(
+			vm, state, .Token_Unexpected,
+			"Expected typename, variable or \"{\" to start array literal"
+		)
+	}
+	
+	#partial switch &b in token.body {
+	case TokenDelimiter:
+	
+		// Parse Literal
+		arr_val, err = parse_array_literal_expr(vm, state, scope, type)
+		if err != nil do return
 		
-			if !types_can_cast(vm, expr.type, type) {
-				return {}, parser_error_emit(
+	case TokenIdentifier:
+		
+		#partial switch get_identifier_type(vm, text) {
+		case .Type:
+			type_id, type_err := get_type_id_by_name(vm, text)
+			if get_base_type(vm, type_id, false) != type {
+				return nil, parser_error_emit(
 					vm, state, .Type_Mismatch,
-					"Given types can't be cast to each other"
+					"Types don't match in array literal"
 				)
 			}
+			
+			// Expect "{"
+			if !parse_util_single_token(
+				vm, state, TokenDelimiter{ type = .CurlyL },
+				"Expected \"{\" in array literal"
+			) { return nil, .Token_Unexpected }
+			
+			// Parse Literal
+			arr_val, err = parse_array_literal_expr(vm, state, scope, type)
+			if err != nil do return
+			
+		case .Function:
+			return nil, parser_error_emit(
+				vm, state, .Unimplemented,
+				"Function calls in array expressions aren't implemented"
+			)
 		
-			// Construct Cast Expression
-			return AST_CastExpr {
-				values = b.values,
-				type = type
-			}, nil
+		case .Variable,
+			.Unknown:
+			return nil, parser_error_emit(
+				vm, state, .Unimplemented,
+				"Variables in array expressions aren't implemented yet"
+			)
 		
 		case:
-			// This *should* ?? be unreachable
-			unreachable()
+			return nil, parser_error_emit(
+				vm, state, .Expression_Invalid,
+				"Invalid array literal expression"
+			)
+		}
+	}
+	
+	// Expect "}"
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter{ type = .CurlyR },
+		"Expected \"}\" in array literal"
+	) { return nil, .Token_Unexpected }
+	
+	return
+}
+
+parse_array_literal_expr :: proc(
+	vm : VM, state : ^ParseState,
+	scope : FRAME, type : TypeID,
+	loc := #caller_location
+) -> (arr_val : AST_ArrayLiteral, err : Error) {
+	
+	// Get array literal type
+	type_body, type_err := get_type(vm, get_base_type(vm, type, true))
+	if type_err != nil do return {}, type_err
+	
+	array_body  := type_body.body.(ArrayBody) or_else unreachable()
+	member_type := get_base_type(vm, array_body.base_type, false)
+	
+	values : [dynamic]AST_ArrayMember
+	defer delete(values)
+	
+	parse_loop: for ;; {
+		
+		// Check for closing
+		next, _, _ := get_next_token(vm, state, false)
+		if delim, ok := next.body.(TokenDelimiter); ok {
+			if delim.type == .CurlyR {
+				
+				// Consume token
+				state.token += 1
+				break parse_loop
+			}
 		}
 		
-		return
+		// Parse expression
+		member_expr, expr_err := parse_expression(vm, state, scope, member_type)
+		if expr_err != nil do return {}, expr_err
+		
+		append(&values, AST_ArrayMember {
+			val = member_expr,
+		})
+		
+		// Expect "," or "}"	
+		token, text, token_err := get_next_token(vm, state)
+		if token_err != nil do return {}, token_err
+		
+		expectation_member := Expectation {
+			positive = {
+				TokenDelimiter {
+					field = { .Comma, .CurlyR }
+				}
+			}
+		}
+		
+		if !parse_expectations(token, expectation_member) {
+			return {}, parser_error_emit(
+				vm, state, .Token_Unexpected,
+				"Expected \",\" between members in array literal or \"}\" to end the literal"
+			)
+		}
+		
+		#partial switch (token.body.(TokenDelimiter) or_else unreachable()).type {
+		case .Comma:  // Continue
+		case .CurlyR: // End
+			break parse_loop
+		
+		case: unreachable()
+		}
 	}
+	
+	if len(values) != array_body.size {
+		return {}, parser_error_emit(
+			vm, state, .Invalid_Array_Size,
+			"Array size doesn't match with provided literal size"
+		)
+	}
+	
+	// Reverse single
+	state.token -= 1
+	
+	// Generate literal
+	alloc, alloc_err := vm_get_ast_allocator(vm)
+	if alloc_err != nil do return {}, alloc_err
+	
+	arr_val.values = slice.clone(values[:], alloc)
+	return
 }
 
 // -   Types   -
@@ -1779,8 +1990,7 @@ parse_variable :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Er
 		if type_err != nil do return type_err
 		
 		#partial switch &t in base_type.body {
-		case StructBody,
-			ArrayBody:
+		case StructBody:
 			
 			return parser_error_emit(
 				vm, state, .Unimplemented,
