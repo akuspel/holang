@@ -405,6 +405,9 @@ parse_variable_op :: proc(
 		Selector
 	}
 	
+	offsets : [dynamic]AST_OffsetValue
+	defer delete(offsets)
+	
 	parse_loop: for ;; {
 		
 		base_type := get_base_type(vm, res_type, true)
@@ -538,24 +541,43 @@ parse_variable_op :: proc(
 			}
 			
 			// STAGE 1: Expect index
-			// !!! TODO !!! make indexing work
-			// 				with variables too
-			val, val_err := parse_constant_expression(vm, state)
-			if val_err != nil do return val_err
+			expr, expr_err := parse_expression(vm, state, scope, -1)
+			if expr_err != nil do return expr_err
+			single_offset := mem.align_forward_int(b.size, b.align)
 			
-			idx := as_int(val)
-			// Compile time bounds check
-			if idx < 0 || idx >= b.size {
-				return parser_error_emit(
-					vm, state, .Bounds_Check,
-					"Given index doesn't fit within bounds of the array"
-				)
+			#partial switch &t in expr.body {
+			case AST_ConstantValue:
+				
+				idx := as_int(t.value)
+				
+				// Compile time bounds check
+				if idx < 0 || idx >= b.size {
+					return parser_error_emit(
+						vm, state, .Bounds_Check,
+						"Given index doesn't fit within bounds of the array"
+					)
+				}
+				
+				multi_offset  := idx * single_offset
+				off += uintptr(multi_offset)
+			
+			case:
+				
+				// Append offset
+				if off != 0 {
+					append(&offsets, off)
+					off = 0
+				}
+				
+				// Add dynamic offset
+				append(&offsets, AST_OffsetExpr {
+					ceil = b.size,
+					
+					size = single_offset,
+					expr = expr
+				})
 			}
 			
-			single_offset := mem.align_forward_int(b.size, b.align)
-			multi_offset  := idx * single_offset
-			
-			off += uintptr(multi_offset)
 			res_type = b.base_type
 			
 			// STAGE 2: Expect "]"
@@ -589,6 +611,8 @@ parse_variable_op :: proc(
 		}
 	}
 	
+	if len(offsets) > 0 && off > 0 do append(&offsets, off)
+	
 	// STAGE 1: Expect expression
 	base_type := get_base_type(vm, res_type, false)
 	if base_type == -1 {
@@ -608,9 +632,20 @@ parse_variable_op :: proc(
 	node, node_err := ast_allocate_node(vm, state, scope)
 	if node_err != nil do unreachable()
 	
+	offset : AST_Offset
+	if len(offsets) == 0 {
+		offset.single = off
+	} else {
+		
+		alloc, alloc_err := vm_get_ast_allocator(vm)
+		if alloc_err != nil do return  alloc_err
+		
+		offset.values = slice.clone(offsets[:], alloc)
+	}
+	
 	node.body = AST_Assign {
 		var  = id,
-		off  = off,
+		off  = offset,
 		type = base_type,
 		expr = expr
 	}
@@ -1098,6 +1133,9 @@ parse_var_expr :: proc(
 		Selector
 	}
 	
+	offsets : [dynamic]AST_OffsetValue
+	defer delete(offsets)
+	
 	select_loop: for ;; {
 		base_type := get_base_type(vm, res_type, false)
 		res_type = base_type
@@ -1161,24 +1199,43 @@ parse_var_expr :: proc(
 			) { return {}, .Expression_Invalid }
 			
 			// STAGE 1: Expect index
-			// !!! TODO !!! make indexing work
-			// 				with variables too
-			val, val_err := parse_constant_expression(vm, state)
-			if val_err != nil do return {}, val_err
+			expr, expr_err := parse_expression(vm, state, scope, -1)
+			if expr_err != nil do return {}, expr_err
+			single_offset := mem.align_forward_int(b.size, b.align)
 			
-			idx := as_int(val)
-			// Compile time bounds check
-			if idx < 0 || idx >= b.size {
-				return {}, parser_error_emit(
-					vm, state, .Bounds_Check,
-					"Given index doesn't fit within bounds of the array"
-				)
+			#partial switch &t in expr.body {
+			case AST_ConstantValue:
+				
+				idx := as_int(t.value)
+				
+				// Compile time bounds check
+				if idx < 0 || idx >= b.size {
+					return {}, parser_error_emit(
+						vm, state, .Bounds_Check,
+						"Given index doesn't fit within bounds of the array"
+					)
+				}
+				
+				multi_offset  := idx * single_offset
+				off += uintptr(multi_offset)
+			
+			case:
+				
+				// Append offset
+				if off != 0 {
+					append(&offsets, off)
+					off = 0
+				}
+				
+				// Add dynamic offset
+				append(&offsets, AST_OffsetExpr {
+					ceil = b.size,
+					
+					size = single_offset,
+					expr = expr
+				})
 			}
 			
-			single_offset := mem.align_forward_int(b.size, b.align)
-			multi_offset  := idx * single_offset
-			
-			off += uintptr(multi_offset)
 			res_type = b.base_type
 			
 			// STAGE 2: Expect "]"
@@ -1196,9 +1253,20 @@ parse_var_expr :: proc(
 		
 	}
 	
+	offset : AST_Offset
+	if len(offsets) == 0 {
+		offset.single = off
+	} else {
+		
+		alloc, alloc_err := vm_get_ast_allocator(vm)
+		if alloc_err != nil do return {}, alloc_err
+		
+		offset.values = slice.clone(offsets[:], alloc)
+	}
+	
 	// Build result
 	var_val.var  = var
-	var_val.off  = off
+	var_val.off  = offset
 	var_val.type = type
 	
 	return

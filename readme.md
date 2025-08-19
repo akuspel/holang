@@ -167,6 +167,7 @@ fn set_color <self : Mesh> (col : Color255) {
 //     set_color(my_mesh, MY_COLOR);
 //
 // So, this probably never gets implemented!
+// NOTE: immutable variables can't be passed as references!
 //     Works again -->
 
 // --- Entry Point ---

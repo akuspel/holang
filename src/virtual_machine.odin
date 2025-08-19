@@ -10,11 +10,15 @@ import "core:strings"
 import "core:unicode/utf8"
 
 // --- Types ---
+@(private="file")
+FRAME :: ^AST_Frame
+
 @(private)
 VirtualMachine :: struct {
 	
 	// AST Base
 	ast_root : AST_Frame,
+	frames   : [dynamic]FRAME,
 	
 	// Runtime
 	variables : [dynamic]Variable,
@@ -91,10 +95,15 @@ vm_destroy :: proc(vm : ^VM) -> (err : Error) {
 	delete(vm^.tokens)
 	delete(vm^.errors)
 	
+	// AST
+	ast_clean_frame(&vm^.ast_root)
+	for &f in vm^.functions do ast_clean_frame(&f.ast_root)
+	for  f in vm^.frames    do ast_clean_frame(f)
+	delete(vm^.frames)
+	
+	// Arenas
 	mem.dynamic_arena_destroy(&vm^.cmd_arena)
 	mem.dynamic_arena_destroy(&vm^.type_arena)
-	
-	// TODO: handle AST memory	
 	
 	free(vm^)
 	vm^ = nil
@@ -110,11 +119,17 @@ vm_reset :: proc(vm : VM) -> (err : Error) {
 	if vm == nil do return .No_VM
 	
 	clear(&vm.types)
-	mem.dynamic_arena_free_all(&vm.cmd_arena)
-	mem.dynamic_arena_free_all(&vm.type_arena)
 	err = stack_reset(vm.stack)
 	
-	// TODO: handle AST memory
+	// AST
+	ast_clear_frame(&vm.ast_root)
+	for &f in vm.functions do ast_clear_frame(&f.ast_root)
+	for  f in vm.frames    do ast_clear_frame(f)
+	clear(&vm.frames)
+	
+	// Arenas
+	mem.dynamic_arena_free_all(&vm.cmd_arena)
+	mem.dynamic_arena_free_all(&vm.type_arena)
 	
 	clear(&vm.variables)
 	clear(&vm.functions)

@@ -92,10 +92,27 @@ AST_CastExpr :: struct {
 
 AST_VarExpr :: struct {
 	var  : VarID,
-	off  : uintptr,
+	off  : AST_Offset,
 	type : TypeID,
 }
 
+AST_Offset :: struct {
+	single : Maybe(uintptr), // In case offset is constant
+	values : []AST_OffsetValue,
+}
+
+AST_OffsetValue :: union {
+	uintptr,
+	AST_OffsetExpr
+}
+
+AST_OffsetExpr :: struct {
+	
+	ceil : int, // Bounds check
+	
+	size : int, // Single offset size
+	expr : EXPR,
+}
 AST_RuntimeExpression :: struct {
 	values : []AST_ExpressionValue,
 }
@@ -171,7 +188,7 @@ AST_Empty :: AST_Scope(
 AST_Assign :: struct {
 	
 	var  : VarID,
-	off  : uintptr,
+	off  : AST_Offset,
 	
 	type : TypeID,
 	expr : EXPR,
@@ -223,6 +240,7 @@ ast_allocate_frame :: proc(
 	if alloc_err != nil do return nil, alloc_err
 	
 	frame.parent = scope
+	append(&vm.frames, frame)
 	
 	return
 }
@@ -320,4 +338,16 @@ ast_print_node :: proc(vm : VM, node : NODE) {
 	case AST_Conditional:
 		fmt.println("Conditional Expression")
 	}
+}
+
+@(private)
+ast_clear_frame :: proc(frame : FRAME) {
+	clear(&frame.nodes)
+	clear(&frame.variables)
+}
+
+@(private)
+ast_clean_frame :: proc(frame : FRAME) {
+	delete(frame.nodes)
+	delete(frame.variables)
 }
