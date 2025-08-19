@@ -802,10 +802,13 @@ parse_expression :: proc(
 		// Must ignore unique to get true base
 	#partial switch &b in type_body.body {
 	case StructBody:
-		return nil, parser_error_emit(
-			vm, state, .Unimplemented,
-			"Expressions not yet implemented for given types"
-		)
+		struct_lit, struct_err := parse_struct_expr(vm, state, scope, base_type)
+		if struct_err != nil do return nil, struct_err
+		
+		if expr == nil do expr, err = ast_allocate_expr(vm, state)
+		assert(err == nil, "Unable to allocate expression")
+		
+		expr.body = struct_lit
 		
 	case ArrayBody:
 		arr_lit, arr_err := parse_array_expr(vm, state, scope, base_type)
@@ -1421,6 +1424,220 @@ parse_array_literal_expr :: proc(
 	return
 }
 
+parse_struct_expr :: proc(
+	vm : VM, state : ^ParseState,
+	scope : FRAME, type : TypeID,
+	loc := #caller_location
+) -> (struct_val : AST_ExpressionBody, err : Error) {
+	token, text, token_err := get_next_token(vm, state)
+	if token_err != nil do return nil, token_err
+	
+	// STAGE 0: Expect type or "{"
+	expectation_start := Expectation {
+		positive = {
+			TokenDelimiter {
+				field = { .CurlyL }
+			},
+			
+			TokenIdentifier {}
+		}
+	}
+	
+	if !parse_expectations(token, expectation_start) {
+		return nil, parser_error_emit(
+			vm, state, .Token_Unexpected,
+			"Expected typename, variable or \"{\" to start array literal"
+		)
+	}
+	
+	#partial switch &b in token.body {
+	case TokenDelimiter:
+	
+		// Parse Literal
+		struct_val, err = parse_struct_literal_expr(vm, state, scope, type)
+		if err != nil do return
+		
+	case TokenIdentifier:
+		
+		#partial switch get_identifier_type(vm, text) {
+		case .Type:
+			type_id, type_err := get_type_id_by_name(vm, text)
+			if get_base_type(vm, type_id, false) != type {
+				return nil, parser_error_emit(
+					vm, state, .Type_Mismatch,
+					"Types don't match in array literal"
+				)
+			}
+			
+			// Expect "{"
+			if !parse_util_single_token(
+				vm, state, TokenDelimiter{ type = .CurlyL },
+				"Expected \"{\" in array literal"
+			) { return nil, .Token_Unexpected }
+			
+			// Parse Literal
+			struct_val, err = parse_struct_literal_expr(vm, state, scope, type)
+			if err != nil do return
+			
+		case .Function:
+			return nil, parser_error_emit(
+				vm, state, .Unimplemented,
+				"Function calls in array expressions aren't implemented"
+			)
+		
+		case .Variable,
+			.Unknown:
+			return nil, parser_error_emit(
+				vm, state, .Unimplemented,
+				"Variables in array expressions aren't implemented yet"
+			)
+		
+		case:
+			return nil, parser_error_emit(
+				vm, state, .Expression_Invalid,
+				"Invalid array literal expression"
+			)
+		}
+	}
+	
+	// Expect "}"
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter{ type = .CurlyR },
+		"Expected \"}\" in array literal"
+	) { return nil, .Token_Unexpected }
+	
+	return
+}
+
+parse_struct_literal_expr :: proc(
+	vm : VM, state : ^ParseState,
+	scope : FRAME, type : TypeID,
+	loc := #caller_location
+) -> (struct_val : AST_StructLiteral, err : Error) {
+	
+	// Get array literal type
+	type_body, type_err := get_type(vm, get_base_type(vm, type, true))
+	if type_err != nil do return {}, type_err
+	
+	struct_body := type_body.body.(StructBody) or_else unreachable()
+	
+	values : [dynamic]AST_StructMember
+	defer delete(values)
+	
+	parse_loop: for ;; {
+		
+		// Check for closing
+		next, _, _ := get_next_token(vm, state, false)
+		if delim, ok := next.body.(TokenDelimiter); ok {
+			if delim.type == .CurlyR {
+				
+				// Consume token
+				state.token += 1
+				break parse_loop
+			}
+		}
+		
+		// STAGE 0: Get identifier
+		token, text, token_err := get_next_token(vm, state)
+		if token_err != nil do return {}, token_err
+		
+		if !parse_expectations(token, expectation_identifier) {
+			return {}, parser_error_emit(
+				vm, state, .Token_Unexpected,
+				"Expected member identifier in struct literal"
+			)
+		}
+		
+		if text == "" || text == "_" {
+			return {}, parser_error_emit(
+				vm, state, .Unknown_Member,
+				"Invalid struct member identifier"
+			)
+		}
+		
+		idx := -1; for m, i in struct_body.members {
+			(m.name == text) or_continue
+			
+			idx = i
+			break
+		}
+		
+		if idx == -1 {
+			return {}, parser_error_emit(
+				vm, state, .Unknown_Member,
+				"Invalid struct member identifier"
+			)
+		}
+		
+		member := struct_body.members[idx]
+		
+		for m in values {
+			(m.idx == idx) or_continue
+			
+			fmt.println(values, member, idx)
+			
+			// Given name already exists in values
+			return {}, parser_error_emit(
+				vm, state, .Struct_Member_Over,
+				"Overwriting existing member value in struct literal"
+			)
+		}
+		
+		// STAGE 1: Expect "="
+		if !parse_util_single_token(
+			vm, state, TokenOperator { type = .Equals },
+			"Expected \"=\" after struct member identifier"
+		) { return {}, .Token_Unexpected }
+		
+		// STAGE 2: Parse expression
+		member_expr, expr_err :=
+			parse_expression(vm, state, scope, get_base_type(vm, member.base_type, false))
+		if expr_err != nil do return {}, expr_err
+		
+		append(&values, AST_StructMember {
+			idx = idx,
+			val = member_expr,
+		})
+		
+		// Expect "," or "}"
+		token, text, token_err = get_next_token(vm, state)
+		if token_err != nil do return {}, token_err
+		
+		expectation_member := Expectation {
+			positive = {
+				TokenDelimiter {
+					field = { .Comma, .CurlyR }
+				}
+			}
+		}
+		
+		if !parse_expectations(token, expectation_member) {
+			return {}, parser_error_emit(
+				vm, state, .Token_Unexpected,
+				"Expected \",\" between members in struct literal or \"}\" to end the literal"
+			)
+		}
+		
+		#partial switch (token.body.(TokenDelimiter) or_else unreachable()).type {
+		case .Comma:  // Continue
+		case .CurlyR: // End
+			break parse_loop
+		
+		case: unreachable()
+		}
+	}
+	
+	// Reverse single
+	state.token -= 1
+	
+	// Generate literal
+	alloc, alloc_err := vm_get_ast_allocator(vm)
+	if alloc_err != nil do return {}, alloc_err
+	
+	struct_val.values = slice.clone(values[:], alloc)
+	return
+}
+
 // -   Types   -
 parse_type :: proc(vm : VM, state : ^ParseState) -> (err : Error) {
 	token, text, token_err := get_next_token(vm, state)
@@ -1988,15 +2205,6 @@ parse_variable :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Er
 		base_id := get_base_type(vm, variable.type, true)
 		base_type, type_err := get_type(vm, base_id)
 		if type_err != nil do return type_err
-		
-		#partial switch &t in base_type.body {
-		case StructBody:
-			
-			return parser_error_emit(
-				vm, state, .Unimplemented,
-				"Expressions aren't currently implemented for given type"
-			)
-		}
 	
 		// Expression
 		expr, expr_err = parse_expression(vm, state, scope, variable.type)

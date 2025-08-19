@@ -49,10 +49,12 @@ AST_ConstantValue :: struct {
 }
 
 AST_StructLiteral :: struct {
-	values : []struct {
-		idx : int,
-		val : EXPR,
-	}
+	values : []AST_StructMember,
+}
+
+AST_StructMember :: struct {
+	idx : int,
+	val : EXPR,
 }
 
 AST_ArrayLiteral :: struct {
@@ -254,15 +256,6 @@ ast_create_variable :: proc(
 }
 
 @(private)
-ast_count_variables :: proc(
-	scope : FRAME
-) -> int {
-	n : int; if scope.parent != nil {
-		n = ast_count_variables(scope.parent)
-	};  return len(scope.variables) + n
-}
-
-@(private)
 ast_append_node :: proc(
 	vm : VM, state : ^ParseState,
 	scope : FRAME, node : NODE
@@ -273,6 +266,58 @@ ast_append_node :: proc(
 	_, err = append(&scope.nodes, node)
 	assert(err == nil, "Unable to append to Scope!")
 	
-	fmt.println("AST", node)
+	ast_print_node(vm, node)
 	return
+}
+
+// --- Utils ---
+@(private)
+ast_count_variables :: proc(
+	scope : FRAME
+) -> int {
+	n : int; if scope.parent != nil {
+		n = ast_count_variables(scope.parent)
+	};  return len(scope.variables) + n
+}
+
+@(private)
+ast_get_variable :: proc(
+	scope : FRAME,
+	id : VarID,
+) -> (var : Variable, found : bool) {
+	
+	if scope.parent != nil do var, found = ast_get_variable(scope.parent, id)
+	if found do return
+	
+	min := ast_count_variables(scope.parent) if
+		scope.parent != nil else 0
+	
+	for v, i in scope.variables {
+		(VarID(min + i) == id) or_continue
+		
+		return v, true
+	};  return
+}
+
+@(private="file")
+ast_print_node :: proc(vm : VM, node : NODE) {
+	fmt.printf("AST ")
+	
+	switch &b in node.body {
+	case AST_Assign:
+		v, _ := ast_get_variable(node.scope, b.var)
+		t, _ := get_type(vm, b.type)
+		fmt.println("Assign", v.name, ":", t.name, "= EXPR")
+		
+	case AST_Branch:	fmt.println("Branch")
+	case AST_Break: 	fmt.println("Break")
+	case AST_Return:	fmt.println("Return")
+	case AST_Continue:	fmt.println("Continue")
+	
+	case AST_Empty:		fmt.println("Scope")
+	case AST_For:		fmt.println("For Loop")
+	
+	case AST_Conditional:
+		fmt.println("Conditional Expression")
+	}
 }
