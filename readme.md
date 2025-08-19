@@ -1,5 +1,4 @@
-# HoLang - Typed Interpreted Scripting Language
-![Holang Logo](res/logo.svg)
+# ![Holang Logo](res/logo.svg) HoLang - Typed Interpreted Scripting Language
 **HoLang**, **.ho**, or more formally, **Homeshift Language**,
 is a WIP interpreted language written in Odin.
 
