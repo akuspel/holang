@@ -24,4 +24,5 @@ Function :: struct {
 FunctionArgument :: struct {
 	name : string,
 	type : TypeID,
+	as_ref : bool,
 }

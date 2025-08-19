@@ -125,8 +125,50 @@ fn new_mesh(tris : int, col : Color255) -> Mesh {
 	return mesh;
 }
 
+fn mesh_add_tri(mesh : &Mesh, tri : Triangle) {
+	if (mesh.n_tris >= MAX_TRIANGLES) return;
+	
+	// References can be mutated
+	mesh.tris[mesh.n_tris] = tri;
+	mesh.n_tris += 1;
+	
+	// You may be asking:
+	//   " if you have references, (safe btw)
+	//     the hell you need pointers for? "
+	//
+	// And the answer is...
+	// Well, cause I want them!
+	// Also cause we can do beloved
+	// C-style strings with ease (IO)
+}
 
+// Horrible concept that hopefully won't get implemented:
+//     Methods!
+
+// Method parents are automatically a reference
+fn set_color <self : Mesh> (col : Color255) {
+	
+	self.col = {
+		float(col[0]) / 256,
+		float(col[1]) / 256,
+		float(col[2]) / 256,
+		float(col[3]) / 256,
+	};
+}
+
+// Would be called like:
+//     var MY_COLOR : immutable Color255 =
+//         {0, 255, 100, 255};
+//
+//     my_mesh.set_color(MY_COLOR);
+//
+// Semantically identical to:
+//     fn set_color(mesh : &Mesh, col : Color255) { ... }
+//     set_color(my_mesh, MY_COLOR);
+//
+// So, this probably never gets implemented!
 //     Works again -->
+
 // --- Entry Point ---
 // Execution begins from an entry block, where
 // Defined variables are local to that block,
@@ -151,7 +193,11 @@ entry {
 	// If we only want en entry function, we can call
 	// One in an entry block, E.G. entry { main() }
 	var my_mesh = new_mesh(100, { 255, 100, 53, 200 });
+	mesh_add_tri(my_mesh, {});
+	// The parser checks that ref members
+	// Are a valid variable of given type
 }
+
 
 // Nice example, say I so myself!
 ```

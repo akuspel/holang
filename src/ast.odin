@@ -237,7 +237,18 @@ ast_create_variable :: proc(
 	_, err = append(&scope.variables, variable)
 	if err != nil do return -1, err
 	
-	return VarID(len(scope.variables) - 1), nil
+	return VarID(
+		ast_count_variables(scope) - 1
+	), nil
+}
+
+@(private)
+ast_count_variables :: proc(
+	scope : FRAME
+) -> int {
+	n : int; if scope.parent != nil {
+		n = ast_count_variables(scope.parent)
+	};  return len(scope.variables) + n
 }
 
 @(private)

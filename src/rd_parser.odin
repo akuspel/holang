@@ -320,6 +320,43 @@ parse_scope :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (new_scope :
 			}
 		
 		case TokenIdentifier:
+			
+			#partial switch get_identifier_type(vm, text) {
+			case .Function:
+				return false, parser_error_emit(
+					vm, state, .Unimplemented,
+					"Function calls are yet to be implemented"
+				)
+			
+			case .Constant,
+				.Type:
+				return false, parser_error_emit(
+					vm, state, .Invalid_Name,
+					"Expected valid function or variable identifier"
+				)
+			
+			case:
+			
+				// Must be a variable
+				var_id, var, found := parse_var_id(scope, text)
+				if !found {
+					return false, parser_error_emit(
+						vm, state, .Invalid_Name,
+						"Expected valid function or varaible identifier"
+					)
+				}
+				
+				if !var.mutable {
+					return false, parser_error_emit(
+						vm, state, .Mutating_Immutable,
+						"Unable to mutate immutable variable"
+					)
+				}
+				
+				// Variable operation
+				var_err := parse_variable_op(vm, state, scope, var_id, var.type)
+				if var_err != nil do return false, var_err
+			}
 		
 		case TokenDelimiter:
 		
@@ -351,6 +388,209 @@ parse_scope :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (new_scope :
 		
 		return
 	}
+}
+
+// -   Scoped Operation   -
+parse_variable_op :: proc(
+	vm : VM, state : ^ParseState,
+	scope : FRAME, id : VarID, type : TypeID
+) -> (err : Error) {
+	
+	
+	// STAGE 0: Parse variable side
+	res_type := type
+	off   : uintptr
+	stage : enum {
+		Value,
+		Selector
+	}
+	
+	parse_loop: for ;; {
+		
+		base_type := get_base_type(vm, res_type, true)
+		type_body, type_err := get_type(vm, base_type)
+		if type_err != nil {
+			return parser_error_emit(
+				vm, state, .Unknown_Type,
+				"Unable to determine variable type"
+			)
+		}
+		
+		#partial switch &b in type_body.body {
+		case StructBody:
+			
+			switch stage {
+			case .Value:
+				
+				token, text, token_err := get_next_token(vm, state)
+				if token_err != nil do return token_err
+				
+				expectation_struct_value := Expectation {
+					positive = {
+						TokenOperator {
+							field = { .Equals }
+						},
+						
+						TokenDelimiter {
+							field = { .Period }
+						}
+					}
+				}
+				
+				// Expect "=" or "."
+				if !parse_expectations(token, expectation_struct_value) {
+					return parser_error_emit(
+						vm, state, .Token_Unexpected,
+						"Expected \"=\" or \".\" after struct variable statement"
+					)
+				}
+				
+				#partial switch &t in token.body {
+				case TokenOperator:
+					// End parse expression
+					break parse_loop
+				
+				case TokenDelimiter:
+					// Change stage
+					stage = .Selector
+				}
+			
+			case .Selector:
+				expectation_struct_selector := Expectation {
+					positive = {
+						TokenIdentifier {}
+					}
+				}
+				
+				token, text, token_err := get_next_token(vm, state)
+				if token_err != nil do return token_err
+				
+				if text == "" || text == "_" {
+					return parser_error_emit(
+						vm, state, .Unknown_Member,
+						"Invalid struct member identifier"
+					)
+				}
+				
+				// Expect member identifier
+				if !parse_expectations(token, expectation_struct_selector) {
+					return parser_error_emit(
+						vm, state, .Token_Unexpected,
+						"Expected member identifier after struct member selector"
+					)
+				}
+				
+				// Find correct member
+				idx := -1; for m, i in b.members {
+					(m.name == text) or_continue
+					
+					idx = i
+					break
+				}
+				
+				if idx == -1 {
+					return parser_error_emit(
+						vm, state, .Unknown_Member,
+						"Invalid struct member identifier"
+					)
+				}
+				
+				// Apply changes
+				member  := b.members[idx]
+				res_type = member.base_type 
+				off     += member.offset
+				
+				stage = .Value
+			}
+		
+		case ArrayBody:
+			assert(stage == .Value, "Incorrect stage in array variable member parsing")
+			
+			// STAGE 0: Expect "["
+			if !parse_util_single_token(
+				vm, state, TokenDelimiter { type = .SquareL },
+				"Expected \"[\" after array variable"
+			) { return .Expression_Invalid }
+			
+			// STAGE 1: Expect index
+			// !!! TODO !!! make indexing work
+			// 				with variables too
+			val, val_err := parse_constant_expression(vm, state)
+			if val_err != nil do return val_err
+			
+			idx := as_int(val)
+			// Compile time bounds check
+			if idx < 0 || idx >= b.size {
+				return parser_error_emit(
+					vm, state, .Bounds_Check,
+					"Given index doesn't fit within bounds of the array"
+				)
+			}
+			
+			single_offset := mem.align_forward_int(b.size, b.align)
+			multi_offset  := idx * single_offset
+			
+			off += uintptr(multi_offset)
+			res_type = b.base_type
+			
+			// STAGE 2: Expect "]"
+			if !parse_util_single_token(
+				vm, state, TokenDelimiter { type = .SquareR },
+				"Expected \"]\" after array index selector"
+			) { return .Expression_Invalid }
+			
+		case:
+			// Expect "=" (TODO: other operators)
+			
+			token, text, token_err := get_next_token(vm, state)
+			if token_err != nil do return token_err
+			
+			expectation_standard := Expectation {
+				positive = {
+					TokenOperator {
+						field = { .Equals }
+					}
+				}
+			}
+			
+			if !parse_expectations(token, expectation_standard) {
+				return parser_error_emit(
+					vm, state, .Token_Unexpected,
+					"Expected \"=\" after variable expression"
+				)
+			}
+			
+			break parse_loop
+		}
+	}
+	
+	// STAGE 1: Expect expression
+	base_type := get_base_type(vm, res_type, false)
+	if base_type == -1 {
+		return parser_error_emit(
+			vm, state, .Unknown_Type,
+			"Unable to determine variable expression type"
+		)
+	}
+	
+	expr, expr_err := parse_expression(vm, state, scope, base_type)
+	if expr_err != nil do return expr_err
+	
+	// STAGE 2: Expect ";"
+	if !parse_util_terminator(vm, state) do return .Token_Unexpected
+	
+	// Finished, generate AST
+	node, node_err := ast_allocate_node(vm, state, scope)
+	if node_err != nil do unreachable()
+	
+	node.body = AST_Assign {
+		var  = id,
+		off  = off,
+		type = base_type,
+		expr = expr
+	}
+	
+	return ast_append_node(vm, state, scope, node)
 }
 
 // -   Constants   -
@@ -695,7 +935,7 @@ parse_expression :: proc(
 					case:
 						// Must be a variable
 						
-						var_id, var_type, found := parse_var_id(scope, text)
+						var_id, var, found := parse_var_id(scope, text)
 						if !found {
 							return nil, parser_error_emit(
 								vm, state, .Expression_Invalid,
@@ -703,7 +943,7 @@ parse_expression :: proc(
 							)
 						}
 						
-						val, val_err := parse_var_expr(vm, state, scope, type, var_id, var_type)
+						val, val_err := parse_var_expr(vm, state, scope, type, var_id, var.type)
 						if val_err != nil do return nil, val_err
 						
 						append(&values, val)
@@ -833,12 +1073,7 @@ parse_expression :: proc(
 					// Expect a member identifier
 					
 					token, text, token_err := get_next_token(vm, state)
-					if token_err != nil {
-						return {}, parser_error_emit(
-							vm, state, .Token_Unexpected,
-							"Expected struct member identifier after selector"
-						)
-					}
+					if token_err != nil do return {}, token_err
 					
 					if text == "" || text == "_" {
 						return {}, parser_error_emit(
@@ -863,7 +1098,7 @@ parse_expression :: proc(
 					}
 					
 					// Apply changes
-					member := b.members[idx]
+					member  := b.members[idx]
 					res_type = member.base_type 
 					off     += member.offset
 					
@@ -902,7 +1137,7 @@ parse_expression :: proc(
 				
 				// STAGE 2: Expect "]"
 				if !parse_util_single_token(
-					vm, state, TokenDelimiter { type = .SquareL },
+					vm, state, TokenDelimiter { type = .SquareR },
 					"Expected \"]\" after array index selector"
 				) { return {}, .Expression_Invalid }
 				
@@ -1678,8 +1913,8 @@ parse_peek_expr_first_type :: proc(vm : VM, scope : FRAME, start : TokenID) -> T
 				return type
 			
 			case .Unknown, .Variable:
-				_, type, _ := parse_var_id(scope, text)
-				return type
+				_, var, _ := parse_var_id(scope, text)
+				return var.type
 			
 			case: continue	
 			}
@@ -1723,13 +1958,14 @@ parse_peek_expr_first_type :: proc(vm : VM, scope : FRAME, start : TokenID) -> T
  * calculate runtime VarID during
  * parsing, if one can be found
  */
-parse_var_id :: proc(scope : FRAME, name : string) -> (id : VarID, type : TypeID, found : bool) {
+parse_var_id :: proc(scope : FRAME, name : string) -> (id : VarID, var : Variable, found : bool) {
 	
-	if scope.parent != nil do id, type, found = parse_var_id(scope.parent, name)
+	if scope.parent != nil do id, var, found = parse_var_id(scope.parent, name)
 	if found do return
+	// defer if found do fmt.println("Variable", name, "found :", id)
 	
 	for v in scope.variables {
-		if v.name == name do return id, v.type, true
+		if v.name == name do return id, v, true
 		id += 1
 	}
 	

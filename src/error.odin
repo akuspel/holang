@@ -104,6 +104,8 @@ ParserError :: enum {
 	Type_Over,			// Trying to override existing
 	Type_Mismatch,		// Types don't match
 	
+	Mutating_Immutable,	// Attempting to mutate an immutable variable
+	
 	Scope_Incomplete,	// Scope has not been finished
 	EOF,				// File has reached its end
 }
