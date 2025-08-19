@@ -70,7 +70,7 @@ AST_MemoryAddress :: struct {
 	// Structs / Arrays from an
 	// Existing variable
 	
-	addr : uintptr,
+	addr : AST_Offset,
 	size : int,
 }
 
