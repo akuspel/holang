@@ -8,32 +8,42 @@ Because safety is boring, HoLang supports *dangerous* pointers and pointer arith
 
 ## Features
 
-Thus far, only the Tokeniser is in a near-complete state. The last remaining feature is String Literal tokenisation.
+Thus far completed features:
+- Tokeniser
+	- Missing string literal tokenisation
+- Parser
+	- AST generation
+	- Type definitions
+		- Structs (nested)
+		- Arrays
+		- Pointers
+		- References (unique names for existing type)
+	- Constant definitions
+		- Single value
+		- Constant expressions
+	- Variable definitions
+	- Variable assignation
+	- Runtime / constant expression detection 
+	- Runtime expression to AST
+	- Array / Struct literals
 
-In addition to the Tokeniser, the Parser is beginning to take shape, with the after mentioned systems (almost) fully implemented:
-- Type definitions
-	- Structs (nested)
-	- Arrays
-	- Pointers
-	- References (unique names for existing type)
-- Constant definitions
-	- Single value
-	- Constant expressions (can parse existing constants)
-
-The parser is developing with great speed, next upcoming variable declarations? (no promises)
+Coming Soon™:
+- Parser
+  	- Logic scopes
+  		- if, else, for
+- Interpreter
+	- Simple commands
+   	- Execute generated AST
 
 Planned features that will take a while to develop:
-- Commands
-	- Runtime AST
-	- Constant VS Runtime
 - Functions
-	- Multiple return values
+	- Single return first, *possibly* multi return later? (not gonna happen)
 - Importing
 	- Borrowed VM's?
+   	- Might end up just as single file
 - FFI
 	- Foreign function definition API
 	- Foreign memory? (and types)
-- Any proper code running
 
 
 ## Syntax
