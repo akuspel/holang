@@ -94,9 +94,9 @@ AST_CastExpr :: struct {
 }
 
 AST_DerefExpr :: struct {
-	using _ : AST_RuntimeExpression,
-	type : TypeID, // Deref result type
-	from : TypeID, // Deref type
+	value : AST_ExpressionBody,
+	type  : TypeID, // Deref result type
+	from  : TypeID, // Deref type
 }
 
 AST_AsPtrExpr :: struct {

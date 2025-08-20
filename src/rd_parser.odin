@@ -995,7 +995,11 @@ parse_expression_content :: proc(
 					
 					TokenOperator {},
 					TokenLiteral {},
-					TokenIdentifier {}
+					TokenIdentifier {},
+					
+					TokenKeyword {
+						field = { .Deref }
+					}
 				}
 			}
 			
@@ -1105,6 +1109,20 @@ parse_expression_content :: proc(
 					
 					append(&values, val)
 					stage = .Value
+				}
+			
+			case TokenKeyword:
+				// Builtins
+				
+				#partial switch b.type {
+				case .Deref:
+					deref_val, deref_err := parse_deref_expr(vm, state, scope, type)
+					if deref_err != nil do return nil, deref_err
+					
+					append(&values, deref_val)
+					stage = .Value
+				
+				case: unreachable()
 				}
 			
 			case: unreachable()
@@ -1926,6 +1944,76 @@ parse_struct_literal_expr :: proc(
 	if alloc_err != nil do return {}, alloc_err
 	
 	struct_val.values = slice.clone(values[:], alloc)
+	return
+}
+
+parse_deref_expr :: proc(
+	vm : VM, state : ^ParseState,
+	scope : FRAME, type : TypeID
+) -> (deref_val : AST_DerefExpr, err : Error) {
+	
+	// STAGE 0: Expect "("
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenL },
+		"Expected \"(\" after deref builtin"
+	) { return {}, .Token_Unexpected }
+	
+	// STAGE 1: Expect type name
+	ptr_type, type_found := parse_util_type(vm, state, " in deref expression")
+	if !type_found do return {}, .Token_Unexpected
+	
+	// STAGE 2: Expect ","
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .Comma },
+		"Expected \",\" after type name in deref expression"
+	) { return {}, .Token_Unexpected }
+	
+	// STAGE 3: Expect ptr expression
+	type_body, type_err := get_type(vm, get_base_type(vm, ptr_type, true))
+	if type_err != nil {
+		return {}, parser_error_emit(
+			vm, state, .Invalid_Type,
+			"Unable to determine type in pointer deref"
+		)
+	}
+	
+	#partial switch &t in type_body.body {
+	case PointerBody:
+		if 	get_base_type(vm, t.base_type, false) !=
+			get_base_type(vm, type, false) {
+			return {}, parser_error_emit(
+				vm, state, .Type_Mismatch,
+				"Dereference and expression types don't match"
+			)
+		}
+		
+	case:
+		return {}, parser_error_emit(
+			vm, state, .Not_A_Pointer,
+			"Trying to dereference a non-pointer type"
+		)
+	}
+	
+	// Parse pointer expression
+	expr : AST_Expression
+	_, p_expr_err := parse_expression(vm, state, scope, ptr_type, &expr)
+	if p_expr_err != nil do return {}, p_expr_err
+	
+	// STAGE 2: Expect ")"
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenR },
+		"Expected \")\" after deref builtin"
+	) { return {}, .Token_Unexpected }
+	
+	// Pointers allowed only in raw scopes
+	if !ast_scope_is_raw(scope) {
+		return {}, parser_error_emit(
+			vm, state, .Disallowed,
+			"Must be in raw scope to use deref builtin"
+		)
+	}
+	
+	deref_val.value = expr.body
 	return
 }
 
