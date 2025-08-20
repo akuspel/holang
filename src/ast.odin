@@ -83,11 +83,25 @@ AST_ExpressionValue :: union {
 	
 	AST_CastExpr,
 	AST_VarExpr,
+	
+	AST_DerefExpr,
+	AST_AsPtrExpr,
 }
 
 AST_CastExpr :: struct {
 	using _ : AST_RuntimeExpression,
 	type : TypeID,
+}
+
+AST_DerefExpr :: struct {
+	using _ : AST_RuntimeExpression,
+	type : TypeID, // Deref result type
+	from : TypeID, // Deref type
+}
+
+AST_AsPtrExpr :: struct {
+	var  : AST_VarExpr,
+	type : TypeID, // Pointer type
 }
 
 AST_VarExpr :: struct {
@@ -128,6 +142,7 @@ AST_Body :: union {
 	
 	// Commands
 	AST_Assign,
+	AST_DerefAssign,
 	
 	AST_Return,
 	AST_Break,
@@ -147,6 +162,8 @@ AST_Frame :: struct {
 	
 	variables : [dynamic]Variable,
 	nodes     : [dynamic]NODE,
+	
+	raw : bool,	// Ignore opaques
 }
 
 AST_Scope :: struct($B : typeid) {
@@ -194,6 +211,17 @@ AST_Assign :: struct {
 	
 	type : TypeID,
 	expr : EXPR,
+}
+
+AST_DerefAssign :: struct {
+	
+	op : Operator,
+	
+	type : TypeID, // Deref result type
+	from : TypeID, // Deref type
+	
+	ptr  : EXPR,   // Pointer expression
+	expr : EXPR,   // Result  expression
 }
 
 AST_Return :: struct {
@@ -292,6 +320,42 @@ ast_append_node :: proc(
 
 // --- Utils ---
 @(private)
+/* --- ast_scope_is_raw ---
+ * checks if given scope allows
+ * the introspection of opaques
+ */
+ast_scope_is_raw :: proc(
+	scope : FRAME
+) -> bool {
+	if scope.raw do return true
+	if scope.parent != nil do return ast_scope_is_raw(scope.parent)
+	return false
+}
+
+/* --- ast_can_access_data ---
+ * detects type data accessibility
+ * based on opaqueness and raw scope
+ */
+ast_can_access_data :: proc(
+	vm : VM, scope : FRAME,
+	type : TypeID
+) -> bool {
+	type_body, type_err :=
+		get_type(vm, get_base_type(vm, type, true))
+	(type_err == nil) or_return
+	#partial switch &b in type_body.body {
+	case ArrayBody,
+		StructBody:
+		
+		return !type_body.obfuscate || ast_scope_is_raw(scope)
+	
+	case:
+	}
+	
+	return true
+}
+
+@(private)
 ast_count_variables :: proc(
 	scope : FRAME
 ) -> int {
@@ -328,6 +392,11 @@ ast_print_node :: proc(vm : VM, node : NODE) {
 		v, _ := ast_get_variable(node.scope, b.var)
 		t, _ := get_type(vm, b.type)
 		fmt.println("Assign", v.name, ":", t.name, TOKEN_OPERATOR[b.op], "EXPR")
+	
+	case AST_DerefAssign:
+		t1, _ := get_type(vm, b.from)
+		t2, _ := get_type(vm, b.type)
+		fmt.println("Dereference from type", t1.name, "to", t2.name)
 		
 	case AST_Branch:	fmt.println("Branch")
 	case AST_Break: 	fmt.println("Break")

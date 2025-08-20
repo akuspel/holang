@@ -18,14 +18,22 @@ TOKEN_KEYWORD := [Keyword]string {
 	.Function	= "fn",
 	.Variable	= "var",
 	
-	.Struct    = "struct",
-	.Unique    = "unique",
-	.Immutable = "immutable",
+	.Struct     = "struct",
+	.Unique     = "unique",
+	.Immutable  = "immutable",
+	.Opaque     = "opaque",
+	.Raw        = "raw",
 	
 	.Entry = "entry",
+	
+	// --- Builtins ---
+	.Deref      = "deref",
+	.AsPtr      = "as_ptr",
+	.TypeOf     = "type_of",
+	.TypeIdOf   = "typeid_of",
 }
 
-KEYWORD_EXPECTATIONS := [Keyword]Expectation {
+KEYWORD_EXPECTATIONS := #partial [Keyword]Expectation {
 	
 	.If = {
 		// After an if statement, we MUST get parentheses

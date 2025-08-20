@@ -19,7 +19,7 @@
 #type char = byte;
 
 var my_u8 : u8 = 123;
-var cast_test : byte = char(1.0) + 5 - byte(my_u8);
+var cast_test : byte = char(int, 1.0) + 5 - byte(u8, my_u8);
 
 #type Vec2 = [2]float;
 #type Vec3 = [3]float;
@@ -27,6 +27,15 @@ var cast_test : byte = char(1.0) + 5 - byte(my_u8);
 
 #type Color = Vec4; // Non-unique reference, no casting needed!
 #type Color255 = [4]u8;
+
+// IDEA: enums, which act like
+//		 constants, but cool
+// #enum MyEnum(int) = {
+// 	ZERO = 0,
+// 	BALLIN = 1,
+// 	MOVING = 2,
+// 	FLIPPN = 3,
+// };
 
 // Colors
 var COLOR_RED : immutable int = 10 + 1;
@@ -88,7 +97,7 @@ entry {
 	// These variables are local to our entry scope
 	// And can't be called from functions
 	var x : int;
-	var y : immutable Zing = int(12 - 3 + uint(x));
+	var y : immutable Zing = int(uint, 12 - 3 + uint(int, x));
 	
 	x = (y + 1);
 	y = x; // Throws an error
@@ -98,8 +107,10 @@ entry {
 		gen = 3 * y,
 	};
 	
+	actors[10 + AAA].id = actors[10 + AAA].id.idx;
+	
 	var my_vec : Vec4 = Vec4 {
-		1, 2, 3 * (5.1 + float(x)), 4
+		1, 2, 3 * (5.1 + float(int, x)), 4
 	};
 	
 	my_vec = { 0, 0, 0, 1 };
@@ -117,10 +128,42 @@ entry {
 	// 	if (b == 2) x = 2;
 	// }
 	
+	var my_str : string;
+	var h : cstring;
+	{
+		raw; // Current scope is raw from here on
+		my_str._data = 10;
+		my_str = {
+			_data = 0,
+			_size = 0,
+		};
+		
+		h = cstring(byte_ptr, my_str._data);
+	}
+	
+	raw;
+	deref(cstring, h) = 100;
 }
 
 
 // --- Functions ---
+// fn str_cmp(a : &string, b : &string) -> bool {
+// 	raw; // Allows transparent access
+	
+// 	if (a._size != b._size) return false;
+	
+// 	for (i : byte_ptr; i < a._size; i += 1) {
+// 		var char_a : byte = deref(a._data + i);
+// 		var char_b : byte = deref(b._data + i);
+// 		if (char_a != char_b) return false;
+// 	}
+	
+// 	return true;
+// }
+
+// fn str_len(s : &string) -> int {
+// 	raw; return s._size;
+// }
 
 /*
 // <--- Works Until

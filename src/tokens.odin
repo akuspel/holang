@@ -63,8 +63,16 @@ Keyword :: enum {
 	Struct,
 	Unique,
 	Immutable,
+	Opaque,		// Obfuscate given variable
+	Raw,		// Ignore opaques
 	 
 	Entry,
+	
+	// --- Builtins ---
+	Deref,		// Pointer dereference: deref (type_name, expr)
+	AsPtr,		// Variable to pointer: as_ptr (type_name, var_name)
+	TypeOf,		// Get a variable type: type_of (var_name)
+	TypeIdOf,	// Get typeid of  type: typeid_of (type_name)
 }
 
 TokenDelimiter :: TokenBody(Delimiter)

@@ -247,7 +247,8 @@ solve_state :: proc(vm : VM, text : string, state : ^ParserState) -> (err : Erro
 		
 		new_type.body = b.type_body
 		fmt.println(new_type)
-		return register_type(vm, new_type)
+		type_id, type_err := register_type(vm, new_type)
+		return type_err
 	
 	// Runtime expression
 	case ExpressionState:

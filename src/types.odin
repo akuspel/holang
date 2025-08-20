@@ -122,7 +122,7 @@ type_byte := Type {
 	align = 1,
 	
 	body = ByteBody {}
-}
+};  byte_id : TypeID
 
 type_bool := Type {
 	name = "bool",
@@ -131,7 +131,7 @@ type_bool := Type {
 	align = 8,
 	
 	body = BoolBody {}
-}
+};  bool_id : TypeID
 
 type_int := Type {
 	name = "int",
@@ -142,7 +142,7 @@ type_int := Type {
 	body = IntBody {
 		signed = true,
 	}
-}
+};  int_id : TypeID
 
 type_uint := Type {
 	name = "uint",
@@ -151,7 +151,7 @@ type_uint := Type {
 	align = 8,
 	
 	body = IntBody {}
-}
+};  uint_id : TypeID
 
 type_float := Type {
 	name = "float",
@@ -160,16 +160,16 @@ type_float := Type {
 	align = 8,
 	
 	body = FloatBody {}
-}
+};  float_id : TypeID
 
 // --- Procedures ---
 
-register_type :: proc(vm : VM, base : Type) -> (err : Error) {
-	if vm == nil do return .No_VM
+register_type :: proc(vm : VM, base : Type) -> (id : TypeID, err : Error) {
+	if vm == nil do return -1, .No_VM
 	type := base
 	
 	// Check for type redifinitions
-	if get_identifier_type(vm, type.name) != .Unknown do return .Type_Over
+	if get_identifier_type(vm, type.name) != .Unknown do return -1, .Type_Over
 	
 	// Copy memory to VM
 	alloc := mem.dynamic_arena_allocator(&vm.type_arena)
@@ -186,27 +186,71 @@ register_type :: proc(vm : VM, base : Type) -> (err : Error) {
 	type.id = TypeID(len(vm.types))
 	append(&vm.types, type)
 	
-	return
+	return type.id, nil
 }
 
 @(private)
 base_types_init :: proc(vm : VM) -> (err : Error) {
 	
-	// NOTE: only called when creating the VM,
-	//		 we can be positively sure, that
+	// NOTE: we can be positively sure, that
 	//		 no errors will be happening here
 	
-	err = register_type(vm, type_byte)
+	byte_id, err = register_type(vm, type_byte)
 	if err != nil do return
 	
-	err = register_type(vm, type_int)
+	int_id, err = register_type(vm, type_int)
 	if err != nil do return
-	err = register_type(vm, type_uint)
+	uint_id, err = register_type(vm, type_uint)
 	if err != nil do return
 	
-	err = register_type(vm, type_float)
+	float_id, err = register_type(vm, type_float)
 	if err != nil do return
-	err = register_type(vm, type_bool)
+	bool_id, err = register_type(vm, type_bool)
+	if err != nil do return
+	
+	// --- Custom Base Types ---
+	type_byte_ptr := Type {
+		name = "byte_ptr",
+		
+		size  = 8,
+		align = 8,
+		
+		body = PointerBody {
+			base_type = byte_id
+		}
+	};	byte_ptr_id : TypeID
+	
+	byte_ptr_id, err = register_type(vm, type_byte_ptr)
+	if err != nil do return
+	
+	type_string := Type {
+		name = "string",
+		
+		// Prevent modifications in non-raw scope
+		obfuscate = true,
+		
+		// Info
+		size  = 16,
+		align = 16,
+		
+		// String body
+		body = StructBody {
+			members = {
+				{	// Raw data
+					name   = "_data",
+					offset = 0,
+					base_type = byte_ptr_id,
+				},
+				{	// Length
+					name   = "_size",
+					offset = 8,
+					base_type = int_id,
+				}
+			}
+		}
+	};  string_id : TypeID
+	
+	string_id, err = register_type(vm, type_string)
 	if err != nil do return
 	
 	return

@@ -25,15 +25,15 @@
      inkscape:deskcolor="#505050"
      inkscape:document-units="px"
      showgrid="true"
-     inkscape:zoom="9.0045629"
-     inkscape:cx="-22.488598"
-     inkscape:cy="12.937885"
+     inkscape:zoom="12.734375"
+     inkscape:cx="22.419632"
+     inkscape:cy="11.190184"
      inkscape:window-width="1920"
      inkscape:window-height="1017"
      inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="layer5">
+     inkscape:current-layer="g30">
     <inkscape:grid
        id="grid1"
        units="px"
@@ -413,8 +413,25 @@
     <g
        inkscape:groupmode="layer"
        id="g30"
-       inkscape:label="Blur copy"
+       inkscape:label="Blur"
        style="filter:url(#filter27)">
+      <ellipse
+         style="opacity:1;fill:#103037;fill-opacity:1;stroke-width:1.61152;stroke-linejoin:round;stroke-dasharray:none;filter:url(#filter27)"
+         id="ellipse4"
+         cx="5.1098614"
+         cy="11.468832"
+         rx="1.5826508"
+         ry="1.5403074"
+         inkscape:label="IrisL"
+         transform="matrix(1.1349145,0,0,1.149053,-0.66976245,-1.7094631)" />
+      <ellipse
+         style="display:inline;opacity:1;fill:#103037;fill-opacity:1;stroke-width:1.44856;stroke-linejoin:round;stroke-dasharray:none"
+         id="path4"
+         cx="25.69124"
+         cy="16.28783"
+         rx="1.4299505"
+         ry="1.3774393"
+         inkscape:label="IrisR" />
       <circle
          style="opacity:1;fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:2.03853;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
          id="circle30"

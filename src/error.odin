@@ -105,6 +105,9 @@ ParserError :: enum {
 	Type_Mismatch,		// Types don't match
 	
 	Mutating_Immutable,	// Attempting to mutate an immutable variable
+	Invalid_Access,		// Access to specific data not allowed
+	Disallowed,			// You did something bad
+	Not_A_Pointer,		// Non pointer given when pointer expected
 	
 	Scope_Incomplete,	// Scope has not been finished
 	EOF,				// File has reached its end
