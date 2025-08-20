@@ -103,6 +103,9 @@ entry {
 	};
 	
 	my_vec = { 0, 0, 0, 1 };
+	var my_other_vec : Vec4 = actors[x + y].col;
+	
+	x += y*5;
 	
 	// Conditionals
 	// if (a == 1) {

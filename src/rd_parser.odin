@@ -408,6 +408,7 @@ parse_variable_op :: proc(
 	offsets : [dynamic]AST_OffsetValue
 	defer delete(offsets)
 	
+	op := Operator.Equals
 	parse_loop: for ;; {
 		
 		base_type := get_base_type(vm, res_type, true)
@@ -586,9 +587,9 @@ parse_variable_op :: proc(
 				"Expected \"]\" after array index selector"
 			) { return .Expression_Invalid }
 			
-		case:
-			// Expect "=" (TODO: other operators)
-			
+		case BoolBody:
+			// Expect only "=" from booleans
+			// TODO: Bool / bitwise operations?
 			token, text, token_err := get_next_token(vm, state)
 			if token_err != nil do return token_err
 			
@@ -603,9 +604,39 @@ parse_variable_op :: proc(
 			if !parse_expectations(token, expectation_standard) {
 				return parser_error_emit(
 					vm, state, .Token_Unexpected,
-					"Expected \"=\" after variable expression"
+					"Expected \"=\" after boolean variable expression"
 				)
 			}
+			
+			break parse_loop
+			
+			
+		case:
+			// Expect "=" (TODO: other operators)
+			
+			token, text, token_err := get_next_token(vm, state)
+			if token_err != nil do return token_err
+			
+			expectation_standard := Expectation {
+				positive = {
+					TokenOperator {
+						field = {
+							.Equals,
+							.AddEq, .SubEq,
+							.MulEq, .DivEq,
+						}
+					}
+				}
+			}
+			
+			if !parse_expectations(token, expectation_standard) {
+				return parser_error_emit(
+					vm, state, .Token_Unexpected,
+					"Expected assignation operation after variable expression"
+				)
+			}
+			
+			op = (token.body.(TokenOperator) or_else unreachable()).type
 			
 			break parse_loop
 		}
@@ -644,6 +675,9 @@ parse_variable_op :: proc(
 	}
 	
 	node.body = AST_Assign {
+		
+		op = op,
+		
 		var  = id,
 		off  = offset,
 		type = base_type,
@@ -1356,6 +1390,12 @@ parse_array_expr :: proc(
 		// Parse Literal
 		arr_val, err = parse_array_literal_expr(vm, state, scope, type)
 		if err != nil do return
+	
+		// Expect "}"
+		if !parse_util_single_token(
+			vm, state, TokenDelimiter{ type = .CurlyR },
+			"Expected \"}\" in array literal"
+		) { return nil, .Token_Unexpected }
 		
 	case TokenIdentifier:
 		
@@ -1378,6 +1418,12 @@ parse_array_expr :: proc(
 			// Parse Literal
 			arr_val, err = parse_array_literal_expr(vm, state, scope, type)
 			if err != nil do return
+	
+			// Expect "}"
+			if !parse_util_single_token(
+				vm, state, TokenDelimiter{ type = .CurlyR },
+				"Expected \"}\" in array literal"
+			) { return nil, .Token_Unexpected }
 			
 		case .Function:
 			return nil, parser_error_emit(
@@ -1387,10 +1433,31 @@ parse_array_expr :: proc(
 		
 		case .Variable,
 			.Unknown:
-			return nil, parser_error_emit(
-				vm, state, .Unimplemented,
-				"Variables in array expressions aren't implemented yet"
-			)
+			
+			// Get variable id
+			var_id, var, found := parse_var_id(scope, text)
+			if !found {
+				return {}, parser_error_emit(
+					vm, state, .Invalid_Name,
+					"Expected a valid variable identifier in array expression"
+				)
+			}
+			
+			var_val, var_err := parse_var_expr(vm, state, scope, type, var_id, var.type)
+			if var_err != nil do return {}, var_err
+			
+			type_body, type_err := get_type(vm, type)
+			if type_err != nil {
+				return {}, parser_error_emit(
+					vm, state, .Unknown_Type,
+					"Unable to determine type of array expression"
+				)
+			}
+			
+			arr_val = AST_MemoryAddress {
+				addr = var_val.off,
+				size = type_body.size
+			}
 		
 		case:
 			return nil, parser_error_emit(
@@ -1399,12 +1466,6 @@ parse_array_expr :: proc(
 			)
 		}
 	}
-	
-	// Expect "}"
-	if !parse_util_single_token(
-		vm, state, TokenDelimiter{ type = .CurlyR },
-		"Expected \"}\" in array literal"
-	) { return nil, .Token_Unexpected }
 	
 	return
 }
@@ -1514,7 +1575,7 @@ parse_struct_expr :: proc(
 	if !parse_expectations(token, expectation_start) {
 		return nil, parser_error_emit(
 			vm, state, .Token_Unexpected,
-			"Expected typename, variable or \"{\" to start array literal"
+			"Expected typename, variable or \"{\" to start struct literal"
 		)
 	}
 	
@@ -1524,6 +1585,12 @@ parse_struct_expr :: proc(
 		// Parse Literal
 		struct_val, err = parse_struct_literal_expr(vm, state, scope, type)
 		if err != nil do return
+	
+		// Expect "}"
+		if !parse_util_single_token(
+			vm, state, TokenDelimiter{ type = .CurlyR },
+			"Expected \"}\" in struct literal"
+		) { return nil, .Token_Unexpected }
 		
 	case TokenIdentifier:
 		
@@ -1533,46 +1600,67 @@ parse_struct_expr :: proc(
 			if get_base_type(vm, type_id, false) != type {
 				return nil, parser_error_emit(
 					vm, state, .Type_Mismatch,
-					"Types don't match in array literal"
+					"Types don't match in struct literal"
 				)
 			}
 			
 			// Expect "{"
 			if !parse_util_single_token(
 				vm, state, TokenDelimiter{ type = .CurlyL },
-				"Expected \"{\" in array literal"
+				"Expected \"{\" in struct literal"
 			) { return nil, .Token_Unexpected }
 			
 			// Parse Literal
 			struct_val, err = parse_struct_literal_expr(vm, state, scope, type)
 			if err != nil do return
+	
+			// Expect "}"
+			if !parse_util_single_token(
+				vm, state, TokenDelimiter{ type = .CurlyR },
+				"Expected \"}\" in struct literal"
+			) { return nil, .Token_Unexpected }
 			
 		case .Function:
 			return nil, parser_error_emit(
 				vm, state, .Unimplemented,
-				"Function calls in array expressions aren't implemented"
+				"Function calls in struct expressions aren't implemented"
 			)
 		
 		case .Variable,
 			.Unknown:
-			return nil, parser_error_emit(
-				vm, state, .Unimplemented,
-				"Variables in array expressions aren't implemented yet"
-			)
+			
+			// Get variable id
+			var_id, var, found := parse_var_id(scope, text)
+			if !found {
+				return {}, parser_error_emit(
+					vm, state, .Invalid_Name,
+					"Expected a valid variable identifier in struct expression"
+				)
+			}
+			
+			var_val, var_err := parse_var_expr(vm, state, scope, type, var_id, var.type)
+			if var_err != nil do return {}, var_err
+			
+			type_body, type_err := get_type(vm, type)
+			if type_err != nil {
+				return {}, parser_error_emit(
+					vm, state, .Unknown_Type,
+					"Unable to determine type of struct expression"
+				)
+			}
+			
+			struct_val = AST_MemoryAddress {
+				addr = var_val.off,
+				size = type_body.size
+			}
 		
 		case:
 			return nil, parser_error_emit(
 				vm, state, .Expression_Invalid,
-				"Invalid array literal expression"
+				"Invalid struct literal expression"
 			)
 		}
 	}
-	
-	// Expect "}"
-	if !parse_util_single_token(
-		vm, state, TokenDelimiter{ type = .CurlyR },
-		"Expected \"}\" in array literal"
-	) { return nil, .Token_Unexpected }
 	
 	return
 }
@@ -2300,6 +2388,9 @@ parse_variable :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Er
 	if node_err != nil do unreachable() // Should be unreachable
 	
 	node.body = AST_Assign {
+		
+		op = .Equals,
+		
 		var  = var_id,
 		type = variable.type,
 		expr = expr,

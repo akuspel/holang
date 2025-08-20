@@ -187,6 +187,8 @@ AST_Empty :: AST_Scope(
 // --  Commands  --
 AST_Assign :: struct {
 	
+	op : Operator,
+	
 	var  : VarID,
 	off  : AST_Offset,
 	
@@ -325,7 +327,7 @@ ast_print_node :: proc(vm : VM, node : NODE) {
 	case AST_Assign:
 		v, _ := ast_get_variable(node.scope, b.var)
 		t, _ := get_type(vm, b.type)
-		fmt.println("Assign", v.name, ":", t.name, "= EXPR")
+		fmt.println("Assign", v.name, ":", t.name, TOKEN_OPERATOR[b.op], "EXPR")
 		
 	case AST_Branch:	fmt.println("Branch")
 	case AST_Break: 	fmt.println("Break")

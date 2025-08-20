@@ -8,7 +8,6 @@
    version="1.1"
    id="svg1"
    sodipodi:docname="logo.svg"
-   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -25,9 +24,9 @@
      inkscape:deskcolor="#505050"
      inkscape:document-units="px"
      showgrid="true"
-     inkscape:zoom="9.0045629"
-     inkscape:cx="-22.488598"
-     inkscape:cy="12.937885"
+     inkscape:zoom="6.3671875"
+     inkscape:cx="-44.289571"
+     inkscape:cy="-6.988957"
      inkscape:window-width="1920"
      inkscape:window-height="1017"
      inkscape:window-x="-8"
@@ -55,7 +54,7 @@
        id="linearGradient24"
        inkscape:collect="always">
       <stop
-         style="stop-color:#ffffff;stop-opacity:1;"
+         style="stop-color:#f4d7d7;stop-opacity:1;"
          offset="0"
          id="stop25" />
       <stop
@@ -67,7 +66,7 @@
        id="linearGradient23"
        inkscape:collect="always">
       <stop
-         style="stop-color:#ffffff;stop-opacity:1;"
+         style="stop-color:#f4d7d7;stop-opacity:1;"
          offset="0"
          id="stop23" />
       <stop
@@ -102,13 +101,13 @@
        inkscape:collect="always"
        style="color-interpolation-filters:sRGB"
        id="filter22"
-       x="-0.17622751"
-       y="-0.17622751"
-       width="1.352455"
-       height="1.352455">
+       x="-0.17071089"
+       y="-0.17071089"
+       width="1.3414218"
+       height="1.3414218">
       <feGaussianBlur
          inkscape:collect="always"
-         stdDeviation="0.92689589"
+         stdDeviation="0.88092408"
          id="feGaussianBlur22" />
     </filter>
     <radialGradient
@@ -198,84 +197,7 @@
          stdDeviation="0.87425383"
          id="feGaussianBlur32" />
     </filter>
-    <filter
-       inkscape:collect="always"
-       style="color-interpolation-filters:sRGB"
-       id="filter1"
-       x="-0.1943602"
-       y="-1.1661612"
-       width="1.3887204"
-       height="3.3323224">
-      <feGaussianBlur
-         inkscape:collect="always"
-         stdDeviation="1.943602"
-         id="feGaussianBlur1" />
-    </filter>
-    <radialGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient19"
-       id="radialGradient2"
-       gradientUnits="userSpaceOnUse"
-       gradientTransform="matrix(1.4734849,-0.00246266,0.00257525,1.5407981,-4.3346123,0.86941974)"
-       cx="14.280361"
-       cy="8.6592751"
-       fx="14.280361"
-       fy="8.6592751"
-       r="11.95" />
-    <filter
-       inkscape:collect="always"
-       style="color-interpolation-filters:sRGB"
-       id="filter2"
-       x="-0.13096721"
-       y="-0.13096721"
-       width="1.2619344"
-       height="1.2619344">
-      <feGaussianBlur
-         inkscape:collect="always"
-         stdDeviation="0.42472673"
-         id="feGaussianBlur2" />
-    </filter>
-    <filter
-       inkscape:collect="always"
-       style="color-interpolation-filters:sRGB"
-       id="filter3"
-       x="-0.66946515"
-       y="-1.2702672"
-       width="2.3389303"
-       height="3.5405343">
-      <feGaussianBlur
-         inkscape:collect="always"
-         stdDeviation="2.2923757"
-         id="feGaussianBlur3" />
-    </filter>
-    <filter
-       inkscape:collect="always"
-       style="color-interpolation-filters:sRGB"
-       id="filter4"
-       x="-0.92502249"
-       y="-0.90652202"
-       width="2.850045"
-       height="2.813044">
-      <feGaussianBlur
-         inkscape:collect="always"
-         stdDeviation="1.4830626"
-         id="feGaussianBlur4" />
-    </filter>
   </defs>
-  <g
-     inkscape:groupmode="layer"
-     id="layer6"
-     inkscape:label="Shadow">
-    <ellipse
-       style="fill:#826363;stroke-linejoin:round;filter:url(#filter1);fill-opacity:1"
-       id="path1"
-       ry="2"
-       rx="12"
-       cy="28"
-       cx="16"
-       transform="matrix(0.83333333,0,0,0.78201978,2.6666667,5.5930168)"
-       inkscape:label="Shade" />
-  </g>
   <g
      inkscape:groupmode="layer"
      id="layer2"
@@ -286,16 +208,9 @@
        id="path17"
        sodipodi:nodetypes="cscsccsccc"
        inkscape:label="HatBG" />
-    <ellipse
-       style="mix-blend-mode:normal;fill:#501616;fill-opacity:1;stroke-width:3.2;stroke-linejoin:round;stroke-dasharray:none;filter:url(#filter4);opacity:0.59484778"
-       id="path3"
-       cx="24.618404"
-       cy="25.128834"
-       rx="1.9239264"
-       ry="1.9631902" />
   </g>
   <g
-     inkscape:label="Base"
+     inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1"
      style="display:inline">
@@ -306,18 +221,11 @@
        cy="16"
        r="10"
        inkscape:label="O_Base" />
-    <circle
-       style="display:inline;opacity:1;mix-blend-mode:screen;fill:none;fill-opacity:1;stroke:url(#radialGradient2);stroke-width:3.2;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1;filter:url(#filter2)"
-       id="circle1"
-       cx="16.222109"
-       cy="15.77789"
-       r="10"
-       inkscape:label="O_Highlight" />
     <g
        inkscape:groupmode="layer"
        id="layer3"
        inkscape:label="Blur"
-       style="display:inline;opacity:1;mix-blend-mode:screen">
+       style="opacity:1;mix-blend-mode:screen">
       <circle
          style="fill:none;fill-opacity:1;stroke:url(#radialGradient20);stroke-width:2.6;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1;filter:url(#filter22)"
          id="path15-8"
@@ -332,14 +240,6 @@
        id="path16"
        sodipodi:nodetypes="cscsc"
        inkscape:label="Hat" />
-    <ellipse
-       style="mix-blend-mode:normal;fill:#d35f5f;fill-opacity:1;stroke-width:3.2;stroke-linejoin:round;stroke-dasharray:none;filter:url(#filter3)"
-       id="path2"
-       cx="18.21299"
-       cy="8.162528"
-       rx="4.1090279"
-       ry="2.1655688"
-       transform="matrix(1.1617741,0,0,1.0651792,-4.5011576,-0.03228045)" />
   </g>
   <g
      inkscape:groupmode="layer"
@@ -367,13 +267,13 @@
        inkscape:label="Blur"
        style="filter:url(#filter27)">
       <path
-         style="opacity:0.26932084;mix-blend-mode:normal;fill:none;stroke:#c33030;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;filter:url(#filter31)"
+         style="opacity:0.5;mix-blend-mode:normal;fill:none;stroke:#c33030;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;filter:url(#filter31)"
          d="M 7.0674847,16.176687 C 10.945255,15.53893 12.009143,14.614931 11.254082,10.925343"
          id="path30"
          sodipodi:nodetypes="cc"
          inkscape:label="Shade" />
       <path
-         style="fill:none;stroke:#b52c2c;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;filter:url(#filter32);opacity:0.27166276"
+         style="fill:none;stroke:#b52c2c;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;filter:url(#filter32);opacity:0.5"
          d="m 21.16319,17.393865 c 0.35787,0.728772 1.268087,2.477475 2.002455,2.866258 0.685172,0.362738 1.949216,0.531205 2.866257,0.117791 0.428966,-0.193382 1.41671,-1.377446 1.531288,-0.903067"
          id="path31"
          sodipodi:nodetypes="cssc"
