@@ -74,6 +74,13 @@ Keyword :: enum {
 	AsPtr,		// Variable to pointer: as_ptr (type_name, var_name)
 	TypeOf,		// Get a variable type: type_of (var_name)
 	TypeIdOf,	// Get typeid of  type: typeid_of (type_name)
+	
+	Alloc,		// Allocate given type: alloc (type_name)
+	Free,		// Free memory of type: free (variable)
+	// NOTE: alloc  can only be assigned to
+	//		 an immutable variable of given
+	//		 pointer type,  where free must
+	//		 be called before scope exit
 }
 
 TokenDelimiter :: TokenBody(Delimiter)
@@ -153,7 +160,7 @@ RuneType :: enum {
 	String, 		// E.G. "This A String Literal\", "
 }
 
-// --- Variables
+// --- Variables ---
 TOKEN_OPERATOR := [Operator]string {
 	.Unknown = "",
 	

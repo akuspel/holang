@@ -146,7 +146,7 @@ parser_error_emit :: proc(
 	
 	fmt.println(error)
 	fmt.println("Message:", message)
-	
+		
 	text, text_err := get_token_string(vm, token)
 	fmt.println("Got:", text)
 	when ODIN_DEBUG do fmt.println(loc)
@@ -2113,6 +2113,14 @@ parse_as_ptr_expr :: proc(
 		type = type
 	}
 	
+	// Check mutability
+	if !var.mutable {
+		return {}, parser_error_emit(
+			vm, state, .Disallowed,
+			"Unable to get the pointer of an immutable variable"
+		)
+	}
+	
 	// Check rarity
 	if !ast_scope_is_raw(scope) {
 		return {}, parser_error_emit(
@@ -2120,8 +2128,6 @@ parse_as_ptr_expr :: proc(
 			"Must be in raw scope to use as_ptr builtin"
 		)
 	}
-	
-	fmt.println("Here we are!")
 	
 	return
 }

@@ -96,6 +96,8 @@ var skibidi_a : int = -1 + 3;
 #const AAA = -(1 + 3);
 #type Zing = int;
 
+#type int_ptr = ^int;
+
 // Entry statement
 entry {
 	
@@ -120,6 +122,9 @@ entry {
 	var my_other_vec : Vec4 = actors[x + y].col;
 	
 	x += y*5;
+	
+	var mog : immutable int = 100;
+	var dog : int_ptr = as_ptr(int_ptr, mog);
 	
 	// Conditionals
 	// if (a == 1) {

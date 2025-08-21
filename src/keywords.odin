@@ -29,8 +29,11 @@ TOKEN_KEYWORD := [Keyword]string {
 	// --- Builtins ---
 	.Deref      = "deref",
 	.AsPtr      = "as_ptr",
-	.TypeOf     = "type_of",
-	.TypeIdOf   = "typeid_of",
+	.TypeOf     = "type_of",	// Won't happen!
+	.TypeIdOf   = "typeid_of",	// Probably won't happen!
+	
+	.Alloc = "alloc",
+	.Free  = "free",
 }
 
 KEYWORD_EXPECTATIONS := #partial [Keyword]Expectation {
