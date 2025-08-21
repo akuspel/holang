@@ -268,14 +268,19 @@ tokenise :: proc(vm : VM, text : string, arr : ^[dynamic]Token) -> (num : int, e
 	// Tokeniser loop
 	for g, i in graphemes {
 		r := utf8.rune_at_pos(text, g.rune_index)
+		width := utf8.rune_size(r)
 		
 		if r == '\n' {
 			line_num += 1
 			rune_num  = 0
 			line_start = i + 1
 			
-			// Automatically end SL comments
+			// Automatically end SL comments and strs
 			is_sl_comment = false
+			
+			if last_type == .String {
+				last_token.end += width
+			}
 			
 			continue
 		}
@@ -323,14 +328,14 @@ tokenise :: proc(vm : VM, text : string, arr : ^[dynamic]Token) -> (num : int, e
 			type = .String }
 		// ---
 		
-		sub  := strings.substring(text, last_token.start, last_token.end) or_else ""
+		sub := strings.substring(text, last_token.start, last_token.end) or_else ""
 		
 		// --- Handle Comments ---
 		comment_started : bool
 		if type != .String {
 			if is_sl_comment || multi_depth > 0 do type = .Comment
 			
-			nsub := strings.substring(text, last_token.start, g.rune_index + g.width) or_else ""
+			nsub := strings.substring(text, last_token.start, g.rune_index + width) or_else ""
 			
 			// Check for comment
 			num_runes_in_sub := utf8.rune_count_in_string(nsub)
@@ -392,13 +397,13 @@ tokenise :: proc(vm : VM, text : string, arr : ^[dynamic]Token) -> (num : int, e
 			append_token(arr, last_token, sub)
 		}
 		
-		last_token.end += g.width
+		last_token.end += width
 		
 		// Take care of last token
 		if i == ng - 1 {
 			last_token = {
 				start = g.rune_index,
-				end   = g.rune_index + g.width,
+				end   = g.rune_index + width,
 				
 				meta = {
 					line_num,
@@ -540,11 +545,9 @@ tokenise :: proc(vm : VM, text : string, arr : ^[dynamic]Token) -> (num : int, e
 			
 		case .String:
 			
-			fixed_string, ok := strings.substring(sub, 1, utf8.rune_count(sub) - 1)
+			fixed_string, ok := strings.substring(sub, 1, len(sub) - 1)
 			
-			// Universal newlines
 			alloc := context.temp_allocator
-			fixed_string, _ = strings.replace_all(fixed_string, "\r\n", "\n", alloc)
 			
 			// Replace literals with exit codes
 			codes := [][2]string {
@@ -557,10 +560,13 @@ tokenise :: proc(vm : VM, text : string, arr : ^[dynamic]Token) -> (num : int, e
 				{"\\v",  "\v"},
 				{"\\\\", "\\"},
 				{"\\\"", "\""},
+			};  for e in codes {
+				fixed_string, _ =
+					strings.replace_all(fixed_string, e.x, e.y, alloc)
 			}
-			for e in codes {
-				fixed_string, _ = strings.replace_all(fixed_string, e.x, e.y, alloc)
-			}
+			
+			// Universal newlines
+			fixed_string, _ = strings.replace_all(fixed_string, "\r\n", "\n", alloc)
 			
 			ptr : uintptr
 			string_allocation:

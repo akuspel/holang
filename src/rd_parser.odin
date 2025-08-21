@@ -780,7 +780,11 @@ parse_constant :: proc(vm : VM, state : ^ParseState) -> (err : Error) {
 		name = identifier,
 		value = value
 	}
-	fmt.println("Constant", identifier, "=", value)
+	fmt.print("Constant", identifier, "=", value)
+	if ptr, ok := value.(uintptr); ok && ptr != 0 {
+		fmt.print(" ->", transmute(cstring)get_global_ptr(vm, ptr))
+	}
+	fmt.println()
 	
 	return register_constant(vm, constant)
 }

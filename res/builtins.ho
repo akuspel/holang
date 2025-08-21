@@ -1,0 +1,116 @@
+
+/* --- HoLang Builtins ---
+ * documentation for builtin
+ * types and functions in HoLang
+ */
+
+// --- Types ---
+// --  Base Types  --
+// Base types are the core of the language
+// And are defined as such:
+//
+// byte:
+//     unsigned 8-bit integer
+// int:
+//     signed 64-bit integer
+// uint:
+//     unsigned 64-bit integer
+// float:
+//     64-bit floating point
+// bool:
+//     64-bit boolean
+
+// --  Support Types  --
+// These types are builtins that rely
+// On the core types of HoLang
+
+#type byte_ptr = ^byte;
+// The byte pointer is the A and O
+// Of low level data management
+// E.G. the base pointer for C-style strings
+
+#type string = opaque struct {
+	_data : byte_ptr,
+	_size : int,
+};
+// The builtin string type is made
+// For handling strings in a nicer
+// And safer way than C-style ptrs
+
+#type vec2 = [2]float;
+#type vec3 = [3]float;
+#type vec4 = [4]float;
+// The builtin vector array types
+// Make game programming a breeze
+
+#type mat3x3 = [3]vec3;
+#type mat4x4 = [4]vec4;
+// In addition basic square matrices
+// Are provided out of the box
+
+// --- Functions ---
+// --  Strings  --
+// Several helper functions
+// For working with strings
+
+// Whole function is marked as raw and
+// Can't be used outside of raw scopes
+fn raw _strlen(_data : byte_ptr) -> int {
+	if (bool(byte_ptr, _data == 0)) return 0;
+	if (bool(byte, deref(byte_ptr, _data) == 0))
+		return 0;
+	
+	for (var i : int; true; i += 1) {
+		if (bool(byte, deref(byte_ptr, _data + byte_ptr(int, i)) == 0))
+			return i;
+	}
+	
+	return 0;
+}
+// The _strlen function is used to calculate
+// Lengths for C-style strings. Not intended
+// For use in casual settings, hence the raw
+// And _ prefix
+
+fn to_string(_data : byte_ptr) -> string {
+	raw;
+	var new_string : string = {
+		_data = _data,
+		_size = _strlen(_data),
+	};
+	
+	return new_string;
+}
+// The to_string fn converts a byte pointer into
+// An opaque string, which is a little less scary
+
+fn string_len(str : &string) -> int {
+	raw;
+	return str._size;
+}
+// Gets the length of a string, must be
+// Passed a valid string variable as ref
+
+fn substring(str : &string, start : int, end : int) -> string {
+	var sub  : string;
+	var size : int;
+	
+	{ raw; size = max(0, str._size); }
+		
+	var from : int = min(start,   size);
+	var to   : int = max(min(end, size), from);
+	
+	{
+		raw;
+		sub._data = str._data + byte_ptr(int, from);
+		sub._size = to - from;
+	}
+	
+	return sub;
+}
+// Creates a substring from a given string
+// While making sure both have a valid length
+//
+// Does not take into account the validity of
+// UTF8 characters
+
