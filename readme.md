@@ -96,9 +96,6 @@ entry {
 ```
 
 ## Features
-
-=======
->>>>>>> 729c9694cd58434caf446cad795fe41b99c71b8e
 Thus far completed features:
 - Tokeniser
 	- Missing string literal tokenisation
