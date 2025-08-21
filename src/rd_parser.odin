@@ -263,6 +263,7 @@ parse_scope :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (new_scope :
 		
 		end, parse_err := parse_scope_element(vm, state, new_scope)
 		
+		if parse_err != nil do parse_err = parse_util_skip_until_terminator(vm, state, parse_err)
 		if parse_err == .EOF {
 			return nil, parser_error_emit(
 				vm, state, .Scope_Incomplete,
@@ -998,7 +999,7 @@ parse_expression_content :: proc(
 					TokenIdentifier {},
 					
 					TokenKeyword {
-						field = { .Deref }
+						field = { .Deref, .AsPtr }
 					}
 				}
 			}
@@ -1120,6 +1121,13 @@ parse_expression_content :: proc(
 					if deref_err != nil do return nil, deref_err
 					
 					append(&values, deref_val)
+					stage = .Value
+				
+				case .AsPtr:
+					asptr_val, asptr_err := parse_as_ptr_expr(vm, state, scope, type)
+					if asptr_err != nil do return nil, asptr_err
+					
+					append(&values, asptr_val)
 					stage = .Value
 				
 				case: unreachable()
@@ -1592,6 +1600,7 @@ parse_array_expr :: proc(
 			}
 			
 			arr_val = AST_MemoryAddress {
+				var  = var_id,
 				addr = var_val.off,
 				size = type_body.size
 			}
@@ -1803,6 +1812,7 @@ parse_struct_expr :: proc(
 			}
 			
 			struct_val = AST_MemoryAddress {
+				var  = var_id,
 				addr = var_val.off,
 				size = type_body.size
 			}
@@ -2014,6 +2024,101 @@ parse_deref_expr :: proc(
 	}
 	
 	deref_val.value = expr.body
+	return
+}
+
+parse_as_ptr_expr :: proc(
+	vm : VM, state : ^ParseState,
+	scope : FRAME, type : TypeID
+) -> (ptr_val : AST_AsPtrExpr, err : Error) {
+	
+	// STAGE 0: Expect "("
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenL },
+		"Expected \"(\" after as_ptr builtin"
+	) { return {}, .Token_Unexpected }
+	
+	// STAGE 1: Expect type name
+	// NOTE: this isn't strictly necessary
+	//		 since we get the necessary id
+	//		 as a parameter...   but we'll
+	//		 keep it for consistancy sake
+	ptr_type, type_found := parse_util_type(vm, state, "in as_ptr expression")
+	if !type_found do return {}, .Token_Unexpected
+	
+	if ptr_type != type {
+		return {}, parser_error_emit(
+			vm, state, .Type_Mismatch,
+			"Expression and as_ptr builtin types don't match"
+		)
+	}
+	
+	// Check base type
+	type_body, type_err := get_type(vm, get_base_type(vm, ptr_type, true))
+	if type_err != nil do return {}, type_err
+	
+	base_type : TypeID
+	#partial switch &b in type_body.body {
+	case PointerBody:
+		base_type = get_base_type(vm, b.base_type, false)
+		
+	case:
+		return {}, parser_error_emit(
+			vm, state, .Not_A_Pointer,
+			"Type name in as_ptr builtin must be a valid pointer"
+		)
+	}
+	
+	if base_type == -1 {
+		return {}, parser_error_emit(
+			vm, state, .Unknown_Type,
+			"Unable to get base type in as_ptr expression"
+		)
+	}
+	
+	// STAGE 2: Expect ","
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .Comma },
+		"Expected \",\" after type name in as_ptr builtin"
+	) { return {}, .Token_Unexpected }
+	
+	// STAGE 3: Parse variable
+	token, text, token_err := get_next_token(vm, state)
+	if token_err != nil do return {}, token_err
+	
+	var_id, var, found := parse_var_id(scope, text)
+	if !found {
+		return {}, parser_error_emit(
+			vm, state, .Invalid_Name,
+			"Expected a valid variable identifier in as_ptr expression"
+		)
+	}
+	
+	var_val, var_err := parse_var_expr(vm, state, scope, base_type, var_id, var.type)
+	if var_err != nil do return {}, var_err
+	
+	// STAGE 4: Expect ")"
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenR },
+		"Expected \")\" to end as_ptr builtin"
+	) { return {}, .Token_Unexpected }
+	
+	// Finished, generate AST
+	ptr_val = {
+		var  = var_val,
+		type = type
+	}
+	
+	// Check rarity
+	if !ast_scope_is_raw(scope) {
+		return {}, parser_error_emit(
+			vm, state, .Disallowed,
+			"Must be in raw scope to use as_ptr builtin"
+		)
+	}
+	
+	fmt.println("Here we are!")
+	
 	return
 }
 
@@ -2696,9 +2801,6 @@ parse_deref :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Error
 		)
 	}
 	
-	op := (token.body.(TokenOperator) or_else unreachable()).type
-	// Match operator to variable type
-	
 	type_body, type_err = get_type(vm, get_base_type(vm, base_type, true))
 	if type_err != nil {
 		return parser_error_emit(
@@ -2706,6 +2808,9 @@ parse_deref :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Error
 			"Unable to determine dereferenced type"
 		)
 	}
+	
+	// Match operator to variable type
+	op := (token.body.(TokenOperator) or_else unreachable()).type
 	
 	#partial switch &t in type_body.body {
 	case ArrayBody,
@@ -2789,7 +2894,7 @@ parse_util_single_token :: proc(vm : VM, state : ^ParseState, t : TokenBody($T),
 	if token_err != nil do return false
 	
 	token_raw, ok := token.body.(TokenBody(T))
-	if !ok {
+	if !ok || token_raw.type != t.type {
 		parser_error_emit(
 			vm, state, .Token_Unexpected,
 			M
@@ -3052,4 +3157,23 @@ parse_util_type :: proc(vm : VM, state : ^ParseState, $M : string) -> (type : Ty
 	}
 	
 	return type_id, true
+}
+
+/* --- parse_util_skip_until_terminator ---
+ * skips all tokens until encountering a terminator
+ */
+parse_util_skip_until_terminator :: proc(vm : VM, state : ^ParseState, from_err : Error) -> (err : Error) {
+	
+	if from_err == .EOF do return .EOF
+	#partial switch &t in from_err {
+	case MemoryError:
+		return from_err
+	}
+	
+	term_loop: for ;; {
+		token, text, token_err := get_next_token(vm, state)
+		if token_err != nil do return token_err
+		
+		if parse_expectations(token, expectation_terminator) do return
+	}
 }

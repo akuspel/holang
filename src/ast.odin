@@ -70,6 +70,7 @@ AST_MemoryAddress :: struct {
 	// Structs / Arrays from an
 	// Existing variable
 	
+	var  : Maybe(VarID), // Potential variable
 	addr : AST_Offset,
 	size : int,
 }

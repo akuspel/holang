@@ -126,6 +126,10 @@ entry {
 	// 	if (b == 2) x = 2;
 	// }
 	
+	var fax_bro : bool;
+	fax_bro = bool(int, x == y);
+	fax_bro = true && fax_bro;
+	
 	var my_str : string;
 	var h : cstring;
 	var b : byte = 10;
@@ -137,7 +141,7 @@ entry {
 			_size = 0,
 		};
 		
-		h = cstring(byte_ptr, my_str._data);
+		h = cstring(byte_ptr, my_str._data) + as_ptr(cstring, b);
 		b = deref(cstring, h) + 100;
 	}
 	
@@ -152,12 +156,14 @@ entry {
 	
 // 	if (a._size != b._size) return false;
 	
-// 	for (i : byte_ptr; i < a._size; i += 1) {
+// 	for (var i : byte_ptr; i < a._size; i += 1) {
 // 		var char_a : byte = deref(byte_ptr, a._data + i);
 // 		var char_b : byte = deref(byte_ptr, b._data + i);
 // 		if (char_a != char_b) return false;
 // 	}
-	
+//	for (var i : int; i < 10; i += 1) { ... } // normal for loop
+//	for (var i in my_array)  { ... } // for each
+//	for (a._size != b._size) { ... } // for true
 // 	return true;
 // }
 
