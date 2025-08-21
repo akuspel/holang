@@ -3166,7 +3166,7 @@ parse_util_skip_until_terminator :: proc(vm : VM, state : ^ParseState, from_err 
 	
 	if from_err == .EOF do return .EOF
 	#partial switch &t in from_err {
-	case MemoryError:
+	case mem.Allocator_Error:
 		return from_err
 	}
 	

@@ -1,4 +1,6 @@
 
+#const MY_STRING_LIT = "This is a st
+ring literal! \n also: \" haha quotes \"";
 /* --- HoLang Example ---
  * an example of valid HoLang code
  * 

@@ -9,6 +9,8 @@ import "core:mem"
 import "core:strings"
 import "core:unicode/utf8"
 
+import "core:math/rand"
+
 // --- Types ---
 @(private="file")
 FRAME :: ^AST_Frame
@@ -41,12 +43,19 @@ VirtualMachine :: struct {
 	size  : int,
 	heap  : int,
 	stack : ^Stack,
+	allocations : [dynamic]VM_Allocation,
 	
 	cmd_arena  : mem.Dynamic_Arena,
 	type_arena : mem.Dynamic_Arena,
 }
 
 VM :: ^VirtualMachine
+VM_Allocation :: struct {
+	ptr  : uintptr,
+	size : int,
+	
+	type : TypeID,
+}
 
 // --- Procedures ---
 vm_init :: proc(stack, heap : int) -> (vm : VM, err : Error) {
@@ -57,28 +66,48 @@ vm_init :: proc(stack, heap : int) -> (vm : VM, err : Error) {
 	if new_err != nil do return nil, new_err
 	defer if err != nil do free(new_vm)
 	
-	size := stack + heap
+	// Align to 8 bytes
+	s := mem.align_forward_int(stack, 8)
+	h := mem.align_forward_int(heap,  8)
+	size := s + h
+	
 	ptr, alloc_err := mem.alloc(size, allocator = alloc)
 	if alloc_err != nil do return nil, alloc_err
 	defer if err != nil do free(ptr)
 	
-	stack, stack_err := stack_make(ptr, stack, alloc)
+	stack, stack_err := stack_make(ptr, s, alloc)
 	if stack_err != nil do return nil, stack_err
 	
 	vm = new_vm
 	vm.data  = ptr
 	vm.stack = stack
 	vm.size  = size
-	vm.heap  = heap
+	vm.heap  = h
 	
 	mem.dynamic_arena_init(&vm.cmd_arena)
 	mem.dynamic_arena_init(&vm.type_arena)
 	
 	// Standard setup
-	types_err := base_types_init(vm)
-	if types_err != nil do return nil, types_err
+	setup_err := vm_standard_setup(vm)
+	if setup_err != nil do return nil, setup_err
 	
 	return
+}
+
+@(private="file")
+vm_standard_setup :: proc(vm : VM) -> Error {
+	
+	types_err := base_types_init(vm)
+	if types_err != nil do return types_err
+	
+	// Allocate header
+	header_ptr, header_err := heap_allocate(vm, 8, 8, int_id)
+	if header_err != nil do return header_err
+	
+	(^int)(get_global_ptr(vm, header_ptr))^ = 
+		int(rand.int63())
+	
+	return nil
 }
 
 vm_destroy :: proc(vm : ^VM) -> (err : Error) {
@@ -94,6 +123,7 @@ vm_destroy :: proc(vm : ^VM) -> (err : Error) {
 	
 	delete(vm^.tokens)
 	delete(vm^.errors)
+	delete(vm^.allocations)
 	
 	// AST
 	ast_clean_frame(&vm^.ast_root)
@@ -118,6 +148,9 @@ vm_destroy :: proc(vm : ^VM) -> (err : Error) {
 vm_reset :: proc(vm : VM) -> (err : Error) {
 	if vm == nil do return .No_VM
 	
+	mem_err := reset_memory(vm)
+	if mem_err != nil do return mem_err
+	
 	clear(&vm.types)
 	err = stack_reset(vm.stack)
 	
@@ -134,6 +167,11 @@ vm_reset :: proc(vm : VM) -> (err : Error) {
 	clear(&vm.variables)
 	clear(&vm.functions)
 	clear(&vm.constants)
+	clear(&vm.allocations)
+	
+	// Standard setup
+	setup_err := vm_standard_setup(vm)
+	if setup_err != nil do return setup_err
 	
 	return
 }
@@ -171,7 +209,7 @@ vm_tokenise_remainder :: proc(vm : VM) -> (err : Error) {
 	sub := strings.substring(vm.text, vm.tokenised_to, n_runes) or_else ""
 	if sub == "" do return .Text_Invalid // Empty string must be a result of previous or_else
 	
-	n, t_err := tokenise(sub, &vm.tokens)
+	n, t_err := tokenise(vm, sub, &vm.tokens)
 	if t_err != nil do return t_err
 	
 	vm.tokenised_to += n

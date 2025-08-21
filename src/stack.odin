@@ -70,6 +70,7 @@ stack_push :: proc(
 	
 	if min(size, align) <= 0 do return 0, .Invalid_Size
 	val_ptr = mem.align_forward_uintptr(
+		// s.off, uintptr(align)
 		s.off, uintptr(align)
 	);	new_off := val_ptr + uintptr(size)
 	
@@ -83,7 +84,7 @@ stack_push :: proc(
 	
 	s.off = new_off
 	
-	return
+	return uintptr(s.data) + s.off, nil
 }
 
 stack_pop :: proc(

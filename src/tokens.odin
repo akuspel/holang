@@ -7,6 +7,7 @@ package holang
 
 import "base:intrinsics"
 
+import "core:mem"
 import "core:fmt"
 import "core:strings"
 import "core:strconv"
@@ -240,7 +241,7 @@ get_rune_type :: proc(r : rune) -> RuneType {
 	}
 }
 
-tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Error) {
+tokenise :: proc(vm : VM, text : string, arr : ^[dynamic]Token) -> (num : int, err : Error) {
 	if arr == nil do return 0, .No_Destination
 	if !utf8.valid_string(text) do return 0, .Invalid_String
 	if text == "" do return 0, .Empty_String
@@ -250,20 +251,28 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 	last_type := get_rune_type(utf8.rune_at_pos(text, 0))
 	last_token : Token
 	
-	multi_depth : int // Multiline comments
-	is_sl_comment  : bool
-	is_str_literal : bool
+	multi_depth   : int  // Multiline comments
+	is_sl_comment : bool // Single line comments
 	
 	// Source code tracking
 	line_num : int = 1
 	rune_num : int
+	line_start : int
 	
+	// String specific
+	TOKEN_QUOTE :: '"'
+	skip_next  : bool
+	end_string : bool
+	was_string : bool
+	
+	// Tokeniser loop
 	for g, i in graphemes {
 		r := utf8.rune_at_pos(text, g.rune_index)
 		
 		if r == '\n' {
 			line_num += 1
 			rune_num  = 0
+			line_start = i + 1
 			
 			// Automatically end SL comments
 			is_sl_comment = false
@@ -272,49 +281,96 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 		}
 		
 		type := get_rune_type(r)
-		if is_sl_comment || multi_depth > 0 do type = .Comment
+		
+		// --- Handle Strings ---
+		defer was_string = false
+		handle_string: if last_type == .String &&
+		   !is_sl_comment &&
+			multi_depth == 0 {
+			TOKEN_DOUBLE_BACK :: '\\'
+			
+			// End string now
+			if end_string {
+				end_string = false
+				was_string = true
+				break handle_string
+			}
+			
+			// Skip current token
+			if skip_next {
+				type = .String
+				skip_next = false
+				
+				break handle_string
+			}
+			
+			// End token after this rune
+			if r == TOKEN_QUOTE {
+				type = .String
+				end_string = true
+				
+				break handle_string
+			}
+			
+			skip_next = (r == TOKEN_DOUBLE_BACK)
+			type = .String
+			
+		}
+		
+		if (type != .String && r == TOKEN_QUOTE) &&
+		   !is_sl_comment &&
+			multi_depth == 0 {
+			type = .String }
+		// ---
 		
 		sub  := strings.substring(text, last_token.start, last_token.end) or_else ""
-		nsub := strings.substring(text, last_token.start, g.rune_index + g.width) or_else ""
 		
-		// Check for comment
-		num_runes_in_sub := utf8.rune_count_in_string(nsub)
-		cs	:= strings.ends_with(nsub, TOKEN_COMMENT_SINGLE)
-		cms := strings.ends_with(nsub, TOKEN_COMMENT_MULTI_S)
-		cme := strings.ends_with(nsub, TOKEN_COMMENT_MULTI_E)
+		// --- Handle Comments ---
 		comment_started : bool
-		if type != .Comment {
+		if type != .String {
+			if is_sl_comment || multi_depth > 0 do type = .Comment
 			
-			if cms do multi_depth += 1
-			is_sl_comment = cs
+			nsub := strings.substring(text, last_token.start, g.rune_index + g.width) or_else ""
 			
-			comment_started = cs || cms
-		} else {
-			
-			d := multi_depth
-			if cms do multi_depth += 1
-			if cme do multi_depth -= 1
-		}
-		
-		if comment_started { // New comment
-			type = .Comment
-			
-			if num_runes_in_sub == 2 { // No need to separate
-				last_type = .Comment
+			// Check for comment
+			num_runes_in_sub := utf8.rune_count_in_string(nsub)
+			cs	:= strings.ends_with(nsub, TOKEN_COMMENT_SINGLE)
+			cms := strings.ends_with(nsub, TOKEN_COMMENT_MULTI_S)
+			cme := strings.ends_with(nsub, TOKEN_COMMENT_MULTI_E)
+			if type != .Comment {
 				
+				if cms do multi_depth += 1
+				is_sl_comment = cs
+				
+				comment_started = cs || cms
 			} else {
-				last_token.end -= 1
 				
-				// Sub must be recalculated
-				sub = strings.substring(
-					text,
-					last_token.start, 
-					last_token.end
-				) or_else ""
+				d := multi_depth
+				if cms do multi_depth += 1
+				if cme do multi_depth -= 1
+			}
+		
+			if comment_started { // New comment
+				type = .Comment
+				
+				if num_runes_in_sub == 2 { // No need to separate
+					last_type = .Comment
+					
+				} else {
+					last_token.end -= 1
+					
+					// Sub must be recalculated
+					sub = strings.substring(
+						text,
+						last_token.start, 
+						last_token.end
+					) or_else ""
+				}
 			}
 		}
+		// ---
 		
-		apnd: if next_token(r, sub, type, last_type, &last_token, false) {
+		apnd: if next_token(vm, r, sub, type, last_type, &last_token, false, was_string) {
 			defer {
 				last_type = type
 				
@@ -325,7 +381,7 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 					meta = {
 						line_num,
 						rune_num,
-						0
+						line_start,
 					}
 				}
 			}
@@ -347,12 +403,12 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 				meta = {
 					line_num,
 					rune_num,
-					0
+					line_start,
 				}
 			}
 			
 			sub := strings.substring(text, last_token.start, last_token.end) or_else ""
-			next_token(r, sub, type, last_type, &last_token, true)
+			next_token(vm, r, sub, type, last_type, &last_token, true, was_string)
 			append_token(arr, last_token, sub)
 		}
 		
@@ -373,13 +429,15 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 	}
 	
 	next_token :: proc(
-		r : rune,
+		vm : VM,
+		r  : rune,
 		sub : string,
 		curr, last : RuneType,
 		token : ^Token,
-		is_last : bool
+		is_last : bool,
+		was_string : bool,
 	) -> bool {
-		(curr != last || curr == .Separator || is_last) or_return
+		(curr != last || curr == .Separator || is_last || was_string) or_return
 		
 		// Identifiers can start with alphabetic rune and include numbers
 		// NOTE: numbers cannot begin identifiers
@@ -481,7 +539,54 @@ tokenise :: proc(text : string, arr : ^[dynamic]Token) -> (num : int, err : Erro
 			}
 			
 		case .String:
-			// Ignore for now (TODO)
+			
+			fixed_string, ok := strings.substring(sub, 1, utf8.rune_count(sub) - 1)
+			
+			// Universal newlines
+			alloc := context.temp_allocator
+			fixed_string, _ = strings.replace_all(fixed_string, "\r\n", "\n", alloc)
+			
+			// Replace literals with exit codes
+			codes := [][2]string {
+				{"\\n",  "\n"},
+				{"\\a",  "\a"},
+				{"\\b",  "\b"},
+				{"\\f",  "\f"},
+				{"\\r",  "\r"},
+				{"\\t",  "\t"},
+				{"\\v",  "\v"},
+				{"\\\\", "\\"},
+				{"\\\"", "\""},
+			}
+			for e in codes {
+				fixed_string, _ = strings.replace_all(fixed_string, e.x, e.y, alloc)
+			}
+			
+			ptr : uintptr
+			string_allocation:
+				if utf8.valid_string(fixed_string) &&
+				ok && len(fixed_string) > 0 && vm != nil {
+				
+				// Allocate the string to heap
+				size := len(fixed_string) + 1 // Add one for null terminator
+				hptr, herr := heap_allocate(vm, size, 1, byte_id)
+				if herr != nil do break string_allocation
+				
+				sptr := get_global_ptr(vm, hptr)
+				
+				// Copy string over
+				mem.copy(rawptr(sptr), raw_data(fixed_string[:]), size - 1)
+				
+				ptr = hptr
+			}
+			
+			if ptr != 0 {
+				token.body = TokenLiteral {
+					type = .String
+				}
+				
+				token.value = ptr
+			}
 		}
 		
 		// Should select next

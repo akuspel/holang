@@ -97,7 +97,6 @@ entry {
 ## Features
 Thus far completed features:
 - Tokeniser
-	- Missing string literal tokenisation
 - Parser
 	- AST generation
 	- Type definitions

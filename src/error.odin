@@ -47,6 +47,9 @@ MemoryError :: enum {
 	
 	Copy_Issue, 	// Unable to copy memory
 	Invalid_Size,	// Invalid memory size, usually negative or zero
+	
+	Uninitialized,	// Uninitialized memory
+	Alloc_Overflow, // Trying to allocate too large of a memory
 }
 
 VMError :: enum {
