@@ -35,7 +35,6 @@ Certain types (arrays, structs) can be marked as opaque, which prevents access t
 	_data_ptr   : byte_ptr
 };
 
-<<<<<<< HEAD
 #type MyStruct = struct {
 	value : int,
 	data  : MySecrets
