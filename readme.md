@@ -4,36 +4,134 @@ is a WIP interpreted language written in Odin.
 
 Its creation was the result of annoyance from a lack of existing scripting languages with *STRONG* typing and simple syntax. The end goal is to create an easily embeddable language, whose capabilities will serve well for creating Gameplay scripts for *Homeshift*, an easily moddable 2D platformer in the works by *HarjuTales*.
 
-Because safety is boring, HoLang supports *dangerous* pointers and pointer arithmetic (TODO), though there are guardrails in place to prevent accessing memory outside of the VM or dereferencing null pointers (insert meme here).
+Because safety is boring, HoLang supports *dangerous* pointers and pointer arithmetic, though there are guardrails in place to prevent accessing memory outside of the VM or dereferencing null pointers (insert meme here).
+
+### Raw Scopes
+One of HoLang's provided safety features are *raw scopes*. The compiler prevents access to certain data, and pointer operations (deref, as_ptr) outside of raw scopes, which can be defined with the keyword `raw;`, after which the whole rest of the given scope is raw.
+```go
+entry {
+	// Defaults to not raw
+	
+	{
+		raw;
+		// This scope is raw now
+	}
+	
+	// Not raw again
+	raw;
+	
+	// Now the rest of the scope is raw
+	// Do dangerous stuff all you want!
+	
+	raw; // Error, the scope is already raw
+}
+```
+
+Certain types (arrays, structs) can be marked as opaque, which prevents access to its data without using a raw scope. Furthermore pointers can't be dereferenced or got outside of raw scopes. Example:
+```go
+#type MySecrets = opaque struct {
+	_secret_int : int,
+	_scary_bool : bool,
+	_data_ptr   : byte_ptr
+};
+
+#type MyStruct = struct {
+	value : int,
+	data  : MySecrets
+};
+
+entry {
+	
+	var my_var : MyStruct;
+	my_var.value = 10;
+	
+	// Trying to access opaque data will result in an error
+	my_var.data._secret_int = my_var.value + 1; // Error!
+	
+	// These can still be assigned with other such variables
+	var secret : MySecrets;
+	my_var.data = secret; // No error!
+	
+	// A pointer to a byte, defaults to a null pointer
+	var my_ptr : byte_ptr;
+	var a_byte : byte;
+	var anotha : byte = 102;
+	var athird : byte = 105;
+	
+	// Can't get variable pointers outside of raw scopes
+	my_ptr  = as_ptr(byte_ptr, a_byte); // Error!
+	my_ptr += 10; // Pointer arithmetic can still be performed
+	
+	// If we want to access the data itself, we'll need to make the scope raw
+	{
+		// We can limit rawness by placing it in a simple
+		// Scope, the rawness will not carry over outside 
+		raw;
+		
+		// Now we can access the data freely
+		my_var.data._secret_int = my_var.value + 1; // No error!
+		
+		// We can do as many pointer operations as we want!
+		my_ptr = as_ptr(byte_ptr, a_byte);
+		my_var.data._data_ptr = as_ptr(byte_ptr, anotha) + 1;
+	}
+	
+	// Any attempt to dereference outside of raw will end horribly
+	deref(byte_ptr, my_ptr) = 10; // Error!
+	
+	raw;
+	// Now the scope is raw, we can do what we want
+	deref(byte_ptr, my_ptr) = 10;
+	var x : int = int(
+		byte, // Cast from a byte to int
+		deref(byte_ptr, my_var.data._data_ptr) +
+		deref(byte_ptr, my_ptr)
+	);
+	
+	if (bool(int, x == 115)) {
+		// True!
+	}
+}
+```
 
 ## Features
 
-Thus far, only the Tokeniser is in a near-complete state. The last remaining feature is String Literal tokenisation.
+Thus far completed features:
+- Tokeniser
+	- Missing string literal tokenisation
+- Parser
+	- AST generation
+	- Type definitions
+		- Structs (nested)
+		- Arrays
+		- Pointers
+		- References (unique names for existing type)
+	- Constant definitions
+		- Single value
+		- Constant expressions
+	- Variable definitions
+	- Variable assignation
+	- Runtime / constant expression detection 
+	- Runtime expression to AST
+	- Array / Struct literals
 
-In addition to the Tokeniser, the Parser is beginning to take shape, with the after mentioned systems (almost) fully implemented:
-- Type definitions
-	- Structs (nested)
-	- Arrays
-	- Pointers
-	- References (unique names for existing type)
-- Constant definitions
-	- Single value
-	- Constant expressions (can parse existing constants)
-
-The parser is developing with great speed, next upcoming variable declarations? (no promises)
+Coming Soon™:
+- Parser
+  	- Logic scopes
+  		- if, else, for
+- Interpreter
+	- Simple commands
+   	- Execute generated AST
 
 Planned features that will take a while to develop:
-- Commands
-	- Runtime AST
-	- Constant VS Runtime
 - Functions
-	- Multiple return values
+	- Single return first, *possibly* multi return later? (not gonna happen)
 - Importing
 	- Borrowed VM's?
+   	- Might end up just as single file
 - FFI
 	- Foreign function definition API
 	- Foreign memory? (and types)
-- Any proper code running
 
 
 ## Syntax
@@ -66,20 +164,22 @@ Example:
 #type Color255 = [4]u8;
 
 #const STRING_BUF_SIZE = 1024;
-#type StringBuf = [STRING_BUF_SIZE + 1]byte; // Extra for null character
+#type StringBuf = opaque [STRING_BUF_SIZE + 1]byte; // Extra for null character
 #type cstring = ^byte; // Null terminated string
 
 // --- Struct Stuff ---
 #type Vertex = struct {
 	pos : Vec3,
 	col : Color,
-}
+};
 
 #type Triangle = [3]Vertex;
 #const MAX_TRINGLES = 2048;
 #type TrianleBuff = [MAX_TRIS]Triangle;
 
-#type Mesh = struct {
+// Opaque types (array, struct) members
+// Can only be accessed in raw scopes
+#type Mesh = opaque struct {
 	col : Color,
 	
 	n_tris : int,
@@ -93,30 +193,32 @@ var MY_FAKE_CONSTANT : immutable uint = 75;
 // Constant expressions are evaluated
 // During the parsing step
 var a : float = 10.0 - 12 / (MAX_TRIANGLES - 512); // Evaluated during parsing
-var b : float = (a + float(MY_FAKE_CONSTANT)) * 2; // Evaluated at runtime
+var b : float = (a + float(int, MY_FAKE_CONSTANT)) * 2; // Evaluated at runtime
 
 // <-- Works until
 // --- Functions ---
 fn clamp(v : int, min : int, max : int) -> int {
-	if (v < min) return min;
-	if (v > max) return max;
+	if (bool(int, v < min)) return min;
+	if (bool(int, v > max)) return max;
 	return v;
 }
 
 fn max(a : int, b : int) -> (c : int) {
 	c = a;
-	if (b > a) c = b;
+	if (bool(int, b > a)) c = b;
 	return; // Auto return named returns
 }
 
 fn new_mesh(tris : int, col : Color255) -> Mesh {
 	
 	var mesh : Mesh;
+	
+	raw; // Mark scope as raw to edit mesh data
 	mesh.col = {
-		float(col[0]) / 256,
-		float(col[1]) / 256,
-		float(col[2]) / 256,
-		float(col[3]) / 256,
+		float(u8, col[0]) / 256,
+		float(u8, col[1]) / 256,
+		float(u8, col[2]) / 256,
+		float(u8, col[3]) / 256,
 	};
 
 	mesh.n_tris = clamp(tris, 0, MAX_TRIANGLES);
@@ -125,7 +227,8 @@ fn new_mesh(tris : int, col : Color255) -> Mesh {
 }
 
 fn mesh_add_tri(mesh : &Mesh, tri : Triangle) {
-	if (mesh.n_tris >= MAX_TRIANGLES) return;
+	raw;
+	if (bool(int, mesh.n_tris >= MAX_TRIANGLES)) return;
 	
 	// References can be mutated
 	mesh.tris[mesh.n_tris] = tri;
@@ -146,12 +249,12 @@ fn mesh_add_tri(mesh : &Mesh, tri : Triangle) {
 
 // Method parents are automatically a reference
 fn set_color <self : Mesh> (col : Color255) {
-	
+	raw;
 	self.col = {
-		float(col[0]) / 256,
-		float(col[1]) / 256,
-		float(col[2]) / 256,
-		float(col[3]) / 256,
+		float(u8, col[0]) / 256,
+		float(u8, col[1]) / 256,
+		float(u8, col[2]) / 256,
+		float(u8, col[3]) / 256,
 	};
 }
 
@@ -181,9 +284,9 @@ entry {
 
 	// <-- Works until
 	// You can write logic in an entry frame
-	for (z < x + y) {
+	for (bool(int, z < x + y)) {
 		z += 1 + max(x, y);
-		if (mod(z, 2) == 0) {
+		if (bool(int, mod(z, 2) == 0)) {
 			y -= 1;
 		}
 	}
