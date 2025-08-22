@@ -74,8 +74,10 @@ Keyword :: enum {
 	AsPtr,		// Variable to pointer: as_ptr (type_name, var_name)
 	TypeOf,		// Get a variable type: type_of (var_name)
 	TypeIdOf,	// Get typeid of  type: typeid_of (type_name)
+	SizeOf,		// Get size  of a type: size_of (type_name)
+	AlignOf,	// Get align of a type: align_of (type_name)
 	
-	Alloc,		// Allocate given type: alloc (type_name)
+	Alloc,		// Allocate given type: alloc (type_name, n)
 	Free,		// Free memory of type: free (variable)
 	// NOTE: alloc  can only be assigned to
 	//		 an immutable variable of given
@@ -280,7 +282,7 @@ tokenise :: proc(vm : VM, text : string, arr : ^[dynamic]Token) -> (num : int, e
 		if r == '\n' {
 			line_num += 1
 			rune_num  = 0
-			line_start = i + 1
+			line_start = g.rune_index + width
 			
 			// Automatically end SL comments and strs
 			is_sl_comment = false

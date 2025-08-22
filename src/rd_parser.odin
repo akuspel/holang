@@ -808,7 +808,10 @@ parse_constant_expression :: proc(vm : VM, state : ^ParseState) -> (value : Vari
 		case TokenDelimiter:
 			#partial switch b.type {
 			case .ParenL: depth += 1
-			case .ParenR: depth -= 1
+			case .ParenR:
+				// Remember to check depth
+				if depth == 0 do break expr_loop
+				depth -= 1
 			case:
 				break expr_loop
 			}
@@ -889,7 +892,7 @@ parse_expression :: proc(
 		if const_err != nil do return nil, const_err
 		
 		if expr == nil do expr, err = ast_allocate_expr(vm, state)
-		if err != nil do return nil, err
+		assert(err == nil, "Unable to allocate expression")
 		
 		expr.body = AST_ConstantValue { value = const }
 		return
@@ -1003,7 +1006,9 @@ parse_expression_content :: proc(
 					TokenIdentifier {},
 					
 					TokenKeyword {
-						field = { .Deref, .AsPtr }
+						field = {
+							.Deref, .AsPtr,
+						}
 					}
 				}
 			}
@@ -1897,8 +1902,6 @@ parse_struct_literal_expr :: proc(
 		for m in values {
 			(m.idx == idx) or_continue
 			
-			fmt.println(values, member, idx)
-			
 			// Given name already exists in values
 			return {}, parser_error_emit(
 				vm, state, .Struct_Member_Over,
@@ -2132,6 +2135,93 @@ parse_as_ptr_expr :: proc(
 	return
 }
 
+parse_alloc_expr :: proc(
+	vm : VM, state : ^ParseState,
+	scope : FRAME, type : TypeID
+) -> (alloc_val : Variant, err : Error) {
+	
+	// STAGE 0: Expect "("
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenL },
+		"Expected \"(\" after alloc builtin"
+	){ return nil, .Token_Unexpected }
+	
+	// STAGE 1: Expect type
+	base_type, found := parse_util_type(vm, state, "Expected type in alloc builtin")
+	if !found do return nil, .Token_Unexpected
+	
+	// STAGE 2: Expect ","
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .Comma },
+		"Expected \",\" after type in alloc builtin"
+	){ return nil, .Token_Unexpected }
+	
+	// STAGE 3: Expect constant expression
+	size, expr_err := parse_constant_expression(vm, state)
+	if expr_err != nil do return nil, expr_err
+	
+	// STAGE 4: Expect ")"
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenR },
+		"Expected \")\" after alloc builtin"
+	){ return nil, .Token_Unexpected }
+	
+	// Complete, check semantics and allocate
+	type_body, type_err := get_type(vm, get_base_type(vm, type, true))
+	if type_err != nil {
+		return nil, parser_error_emit(
+			vm, state, .Unknown_Type,
+			"Unable to resolve pointer type"
+		)
+	}
+	
+	#partial switch &b in type_body.body {
+	case PointerBody:
+		base_type = get_base_type(vm, base_type, false)
+		if b.base_type != base_type {
+			return nil, parser_error_emit(
+				vm, state, .Type_Mismatch,
+				"Variable type is not a pointer to type given in alloc builtin"
+			)
+		}
+	
+	case:
+		return nil, parser_error_emit(
+			vm, state, .Type_Mismatch,
+			"Trying to assign allocation result to a non-pointer type"
+		)
+	}
+	
+	// Allocate
+	num_elems := as_int(size); if num_elems <= 0 {
+		return nil, parser_error_emit(
+			vm, state, .Invalid_Size,
+			"Trying to allocate n <= 0 elements of given type"
+		)
+	}
+	
+	type_body, type_err = get_type(vm, get_base_type(vm, base_type, true))
+	if type_err != nil {
+		return nil, parser_error_emit(
+			vm, state, .Unknown_Type,
+			"Unable to determine base type in alloc builtin"
+		)
+	}
+	
+	single_size := mem.align_forward_int(type_body.size, type_body.align)
+	alloc_size  := type_body.size if num_elems == 1 else single_size * num_elems
+	
+	ptr, alloc_err := heap_allocate(vm, alloc_size, type_body.align, base_type)
+	if alloc_err != nil {
+		return nil, parser_error_emit(
+			vm, state, alloc_err,
+			"Unable to complete memory allocation"
+		)
+	}
+	
+	return ptr, nil
+}
+
 // -   Types   -
 parse_type :: proc(vm : VM, state : ^ParseState) -> (err : Error) {
 	token, text, token_err := get_next_token(vm, state)
@@ -2230,7 +2320,7 @@ parse_type :: proc(vm : VM, state : ^ParseState) -> (err : Error) {
 		
 		// --- Type Generation ---
 		type.body = ReferenceBody {
-			base_type = id
+			base_type = get_base_type(vm, id, false)
 		}
 		
 		// Size and alignment
@@ -2301,7 +2391,7 @@ parse_unique_reference_type :: proc(vm : VM, state : ^ParseState, type : ^Type) 
 	
 	// --- Type Generation ---
 	type.body = ReferenceBody {
-		base_type = id,
+		base_type = get_base_type(vm, id, false),
 		unique = true
 	}
 	
@@ -2700,14 +2790,55 @@ parse_variable :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Er
 		base_id := get_base_type(vm, variable.type, true)
 		base_type, type_err := get_type(vm, base_id)
 		if type_err != nil do return type_err
-	
+		
+		im_spec: if !variable.mutable {
+			
+			peek, text, peek_err := get_next_token(vm, state, false)
+			if peek_err != nil do break im_spec
+			
+			kw := peek.body.(TokenKeyword) or_break im_spec
+			#partial switch kw.type {
+			case .Alloc:
+				// Consume the token
+				state.token += 1
+				
+				alloc_val, alloc_err := parse_alloc_expr(vm, state, scope, variable.type)
+				if alloc_err != nil do return alloc_err
+				
+				// Create expression
+				expr, expr_err = ast_allocate_expr(vm, state)
+				assert(err == nil, "Unable to allocate expression")
+				
+				expr.body = AST_ConstantValue {
+					value = alloc_val
+				}
+			
+				// Check scope
+				if scope.parent != nil {
+					return parser_error_emit(
+						vm, state, .Unimplemented,
+						"Allocations outside of file scope are yet to be implemented"
+					)
+				}
+				
+			case: break im_spec
+			}
+			
+			// Expect terminator
+			if !parse_util_terminator(vm, state) {
+				return .Token_Unexpected
+			}
+			
+			break
+		}
+		
 		// Expression
 		expr, expr_err = parse_expression(vm, state, scope, variable.type)
 		if expr_err != nil do return expr_err
 		
 		// Expect terminator
 		if !parse_util_terminator(vm, state) {
-			return 
+			return .Token_Unexpected
 		}
 	}
 	

@@ -31,6 +31,8 @@ TOKEN_KEYWORD := [Keyword]string {
 	.AsPtr      = "as_ptr",
 	.TypeOf     = "type_of",	// Won't happen!
 	.TypeIdOf   = "typeid_of",	// Probably won't happen!
+	.SizeOf		= "size_of",
+	.AlignOf	= "align_of",
 	
 	.Alloc = "alloc",
 	.Free  = "free",
