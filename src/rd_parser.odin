@@ -2181,7 +2181,7 @@ parse_alloc_expr :: proc(
 		if b.base_type != base_type {
 			return nil, parser_error_emit(
 				vm, state, .Type_Mismatch,
-				"Variable type is not a pointer to type given in alloc builtin"
+				"Variable type is not a pointer to the type given in alloc builtin"
 			)
 		}
 	
@@ -2813,8 +2813,8 @@ parse_variable :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Er
 					value = alloc_val
 				}
 			
-				// Check scope
-				if scope.parent != nil {
+				// FOR NOW, LETS ALLOW STATIC ALLOCATIONS EVERYWHERE
+				if scope.parent != nil && false {
 					return parser_error_emit(
 						vm, state, .Unimplemented,
 						"Allocations outside of file scope are yet to be implemented"
