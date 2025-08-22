@@ -49,6 +49,39 @@
 // Are provided out of the box
 
 // --- Functions ---
+// --  Raw Builtins  --
+// Raw builtins are not really functions,
+// But keywords with special handling in
+// The parser.  In code, they are called
+// In a function-like style, but special
+// Rules are applied,  E.G. must provide
+// Constant parameters
+
+// Casting:
+// to_type(from_type, expression)
+// E.G. int(bool, a && b)
+// Written in generic form:
+fn [$T : type] T($F : type, expr : F) -> T
+// Note: such syntax isn't supported by
+// 		 the language itself,   this is
+//		 merely a visualisation
+
+// Pointers:
+fn deref($F : ^$T, expr : F) -> T
+// Dereferences a pointer of given type
+// Can be used in expressions, or assigned
+// To in raw scopes
+
+fn as_ptr($T : type, $V : var_signature(T^)) -> T
+// Gets the pointer of a variable / variable member
+// Can only be used in raw scopes
+
+fn alloc($T : type, $I : int) -> ^T
+// Allocates  to the heap at compile time
+// No runtime allocations happen from its
+// Use.   Must be assigned directly to an
+// Immutable variable
+
 // --  Strings  --
 // Several helper functions
 // For working with strings
@@ -73,20 +106,22 @@ fn raw _strlen(_data : byte_ptr) -> int {
 // And _ prefix
 
 fn to_string(_data : byte_ptr) -> string {
-	raw;
-	var new_string : string = {
-		_data = _data,
-		_size = _strlen(_data),
-	};
+	var new_string : string;
+	raw {
+		new_string = {
+			_data = _data,
+			_size = _strlen(_data),
+		};
+	}
 	
 	return new_string;
 }
 // The to_string fn converts a byte pointer into
 // An opaque string, which is a little less scary
 
-fn string_len(str : &string) -> int {
-	raw;
-	return str._size;
+fn string_len(str : &string) -> (len : int) {
+	raw { len = str._size; }
+	return;
 }
 // Gets the length of a string, must be
 // Passed a valid string variable as ref
@@ -95,13 +130,12 @@ fn substring(str : &string, start : int, end : int) -> string {
 	var sub  : string;
 	var size : int;
 	
-	{ raw; size = max(0, str._size); }
+	raw { size = max(0, str._size); }
 		
 	var from : int = min(start,   size);
 	var to   : int = max(min(end, size), from);
 	
-	{
-		raw;
+	raw {
 		sub._data = str._data + byte_ptr(int, from);
 		sub._size = to - from;
 	}

@@ -148,8 +148,8 @@ entry {
 	var my_str : string;
 	var h : cstring;
 	var b : byte = 10;
-	{
-		raw; // Current scope is raw from here on
+	raw {
+		// Current scope is raw from here on
 		my_str._data = 10;
 		my_str = {
 			_data = 0,
@@ -160,8 +160,7 @@ entry {
 		b = deref(cstring, h) + 100;
 	}
 	
-	raw;
-	deref(cstring, h) = 100;
+	raw { deref(cstring, h) = 100; }
 }
 
 

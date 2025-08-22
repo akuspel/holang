@@ -229,7 +229,7 @@ parse_file_scope :: proc(vm : VM, state : ^ParseState) -> (err : Error) {
 		
 			// Commands can only be placed in entry when in file scope
 			parser_dumbo_emit("Parsing Entry logic!")
-			new_scope, scope_err := parse_scope(vm, state, &vm.ast_root)
+			new_scope, scope_err := parse_scope(vm, state, &vm.ast_root, false)
 			if scope_err != nil do return scope_err
 			
 			
@@ -249,10 +249,12 @@ parse_file_scope :: proc(vm : VM, state : ^ParseState) -> (err : Error) {
 	return
 }
 
-parse_scope :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (new_scope : FRAME, err : Error) {
+parse_scope :: proc(vm : VM, state : ^ParseState, scope : FRAME, raw : bool) -> (new_scope : FRAME, err : Error) {
 	
 	new_scope, err = ast_allocate_frame(vm, state, scope)
 	if err != nil do return
+	new_scope.raw = raw
+	
 	state.scope.depth += 1
 	defer state.scope.depth -= 1
 	
@@ -335,8 +337,27 @@ parse_scope :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (new_scope :
 					)
 				}
 				
-				if !parse_util_terminator(vm, state) do return false, .Token_Unexpected
-				scope.raw = true
+				if !parse_util_single_token(
+					vm, state, TokenDelimiter { type = .CurlyL },
+					"Expected \"{\" after raw keyword"
+				) { return false, .Token_Unexpected }
+				
+				// New raw scope
+				new_scope, scope_err := parse_scope(vm, state, scope, true)
+				if scope_err != nil do return false, scope_err
+				
+				node, node_err := ast_allocate_node(vm, state, scope)
+				if node_err != nil do unreachable() // Should be unreachable
+				
+				node.body = AST_Empty {
+					child = new_scope
+				}
+				
+				err = ast_append_node(vm, state, scope, node)
+				
+				// Keep the old raw; logic here just in case:
+				// if !parse_util_terminator(vm, state) do return false, .Token_Unexpected
+				// scope.raw = true
 			
 			// --- Builtins ---
 			case .Deref:
@@ -390,7 +411,7 @@ parse_scope :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (new_scope :
 			case .CurlyL:
 			
 				// New scope
-				new_scope, scope_err := parse_scope(vm, state, scope)
+				new_scope, scope_err := parse_scope(vm, state, scope, false)
 				if scope_err != nil do return false, scope_err
 				
 				node, node_err := ast_allocate_node(vm, state, scope)

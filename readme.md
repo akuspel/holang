@@ -12,18 +12,16 @@ One of HoLang's provided safety features are *raw scopes*. The compiler prevents
 entry {
 	// Defaults to not raw
 	
-	{
-		raw;
-		// This scope is raw now
-	}
+	raw { /* This scope is raw */ }
 	
 	// Not raw again
-	raw;
 	
-	// Now the rest of the scope is raw
-	// Do dangerous stuff all you want!
-	
-	raw; // Error, the scope is already raw
+	raw {
+		// Another raw scope
+		raw { // Error! Scope is already raw
+			
+		}
+	}
 }
 ```
 
@@ -63,11 +61,7 @@ entry {
 	my_ptr += 10; // Pointer arithmetic can still be performed
 	
 	// If we want to access the data itself, we'll need to make the scope raw
-	{
-		// We can limit rawness by placing it in a simple
-		// Scope, the rawness will not carry over outside 
-		raw;
-		
+	raw {
 		// Now we can access the data freely
 		my_var.data._secret_int = my_var.value + 1; // No error!
 		
@@ -79,17 +73,19 @@ entry {
 	// Any attempt to dereference outside of raw will end horribly
 	deref(byte_ptr, my_ptr) = 10; // Error!
 	
-	raw;
-	// Now the scope is raw, we can do what we want
-	deref(byte_ptr, my_ptr) = 10;
-	var x : int = int(
-		byte, // Cast from a byte to int
-		deref(byte_ptr, my_var.data._data_ptr) +
-		deref(byte_ptr, my_ptr)
-	);
-	
-	if (bool(int, x == 115)) {
-		// True!
+	raw {
+		
+		// Now this scope is raw, we can do what we want
+		deref(byte_ptr, my_ptr) = 10;
+		var x : int = int(
+			byte, // Cast from a byte to int
+			deref(byte_ptr, my_var.data._data_ptr) +
+			deref(byte_ptr, my_ptr)
+		);
+		
+		if (bool(int, x == 115)) {
+			// True!
+		}
 	}
 }
 ```
@@ -211,26 +207,28 @@ fn new_mesh(tris : int, col : Color255) -> Mesh {
 	
 	var mesh : Mesh;
 	
-	raw; // Mark scope as raw to edit mesh data
-	mesh.col = {
-		float(u8, col[0]) / 256,
-		float(u8, col[1]) / 256,
-		float(u8, col[2]) / 256,
-		float(u8, col[3]) / 256,
-	};
-
-	mesh.n_tris = clamp(tris, 0, MAX_TRIANGLES);
+	raw { // Mark scope as raw to edit mesh data
+		mesh.col = {
+			float(u8, col[0]) / 256,
+			float(u8, col[1]) / 256,
+			float(u8, col[2]) / 256,
+			float(u8, col[3]) / 256,
+		};
+		
+		mesh.n_tris = clamp(tris, 0, MAX_TRIANGLES);
+	}
 	
 	return mesh;
 }
 
 fn mesh_add_tri(mesh : &Mesh, tri : Triangle) {
-	raw;
-	if (bool(int, mesh.n_tris >= MAX_TRIANGLES)) return;
-	
-	// References can be mutated
-	mesh.tris[mesh.n_tris] = tri;
-	mesh.n_tris += 1;
+	raw {
+		if (bool(int, mesh.n_tris >= MAX_TRIANGLES)) return;
+		
+		// References can be mutated
+		mesh.tris[mesh.n_tris] = tri;
+		mesh.n_tris += 1;
+	}
 	
 	// You may be asking:
 	//   " if you have references, (safe btw)
@@ -247,13 +245,14 @@ fn mesh_add_tri(mesh : &Mesh, tri : Triangle) {
 
 // Method parents are automatically a reference
 fn set_color <self : Mesh> (col : Color255) {
-	raw;
-	self.col = {
-		float(u8, col[0]) / 256,
-		float(u8, col[1]) / 256,
-		float(u8, col[2]) / 256,
-		float(u8, col[3]) / 256,
-	};
+	raw {
+		self.col = {
+			float(u8, col[0]) / 256,
+			float(u8, col[1]) / 256,
+			float(u8, col[2]) / 256,
+			float(u8, col[3]) / 256,
+		};
+	}
 }
 
 // Would be called like:
