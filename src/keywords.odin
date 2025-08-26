@@ -27,6 +27,7 @@ TOKEN_KEYWORD := [Keyword]string {
 	.Immutable  = "immutable",
 	.Opaque     = "opaque",
 	.Raw        = "raw",
+	.InExpr     = "in_expr",
 	
 	.Entry = "entry",
 	

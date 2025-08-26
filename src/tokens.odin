@@ -70,7 +70,8 @@ Keyword :: enum {
 	Immutable,
 	Opaque,		// Obfuscate given variable
 	Raw,		// Ignore opaques
-	 
+	InExpr,		// Only allow use in expressions
+	
 	Entry,
 	
 	// --- Builtins ---

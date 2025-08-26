@@ -543,10 +543,36 @@ parse_scope :: proc(
 			
 			#partial switch get_identifier_type(vm, text) {
 			case .Function:
-				return false, parser_error_emit(
-					vm, state, .Unimplemented,
-					"Function calls are yet to be implemented"
-				)
+				
+				fun_id, id_err := get_func_id_by_name(vm, text)
+				if id_err != nil {
+					return false, parser_error_emit(
+						vm, state, .Unknown_Func,
+						"Unable to determine function in function call"
+					)
+				}
+				
+				fun, fun_err := get_function(vm, fun_id)
+				if fun_err != nil {
+					return false, parser_error_emit(
+						vm, state, fun_err,
+						"Unable to determine function in function call"
+					)
+				}
+				
+				// TODO: check if the function needs its returns handled
+				
+				call, call_err := parse_function_call(vm, state, scope, fun_id)
+				if call_err != nil do return false, call_err
+				
+				if !parse_util_terminator(vm, state) do return false, .Token_Unexpected
+				
+				// Complete, create node
+				node, node_err := ast_allocate_node(vm, state, scope)
+				if node_err != nil do unreachable()
+				
+				node.body = call
+				err = ast_append_node(vm, state, scope, node)
 			
 			case .Constant,
 				.Type:
@@ -1250,11 +1276,44 @@ parse_expression_content :: proc(
 				// Get identifier type
 				#partial switch get_identifier_type(vm, text) {
 				case .Function:
-					// !!! TODO !!! fix this
-					return nil, parser_error_emit(
-						vm, state, .Unimplemented,
-						"Function calls in expression aren't implemented yet"
-					)
+					// Get function
+					func_id, id_err := get_func_id_by_name(vm, text)
+					func, func_err  := get_function(vm, func_id)
+					
+					if func_err != nil || id_err != nil {
+						return nil, parser_error_emit(
+							vm, state, .Expression_Invalid,
+							"Expected only valid function calls in expression"
+						)
+					}
+					
+					// Check return type
+					return_val, has_return := func.return_val.?
+					if !has_return {
+						return nil, parser_error_emit(
+							vm, state, .Expression_Invalid,
+							"Expected only function calls with return values in expression"
+						)
+					}
+					
+					if !types_match(vm, type, return_val.type) {
+						return nil, parser_error_emit(
+							vm, state, .Type_Mismatch,
+							"Function return type doesn't match expression type"
+						)
+					}
+					
+					// Parse expression
+					call, call_err := parse_function_call(vm, state, scope, func_id)
+					if call_err != nil do return nil, call_err
+					
+					val := AST_CallExpr {
+						fn   = call.fn,
+						args = call.args
+					}
+					
+					append(&values, val)
+					stage = .Value
 				
 				case .Constant:
 					// Get constant value
@@ -3611,6 +3670,152 @@ parse_function :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Er
 			type = type,
 		}, nil
 	}
+}
+
+parse_function_call :: proc(
+	vm : VM, state : ^ParseState,
+	scope : FRAME, fn : FunctionID,
+) -> (call : AST_FunctionCall, err : Error) {
+	
+	func, func_err := get_function(vm, fn)
+	if func_err != nil {
+		return {}, parser_error_emit(
+			vm, state, .Unknown_Func,
+			"Unable to get the function body in a function call"
+		)
+	}
+	
+	// STAGE 0: Expect "("
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenL },
+		"Expected \"(\" after function name in function call"
+	) { return {}, .Token_Unexpected }
+	
+	// STAGE 1: Parse arguments
+	arguments : [dynamic]EXPR
+	defer delete(arguments)
+	
+	idx : int; n_args := len(func.arguments)
+	parse_loop: if n_args > 0 do for ;; {
+		
+		// Check arg count
+		if idx >= n_args {
+			return {}, parser_error_emit(
+				vm, state, .Invalid_Argument,
+				"Argument count in function call doesn't match expected"
+			)
+		}
+		
+		arg := func.arguments[idx]
+		
+		// STAGE 0: Parse expression
+		expr, expr_err := ast_allocate_expr(vm, state)
+		assert(err == nil, "Unable to allocate expression")
+		
+		if !arg.as_ref {
+			
+			// Normal argument
+			_, expr_err = parse_expression(vm, state, scope, arg.type, expr)
+			if expr_err != nil do return {}, expr_err
+			
+		} else {
+			
+			token, text, token_err := get_next_token(vm, state)
+			if token_err != nil do return {}, token_err
+			
+			// Get variable id
+			var_id, var, found := parse_var_id(scope, text)
+			if !found {
+				return {}, parser_error_emit(
+					vm, state, .Invalid_Name,
+					"Expected a valid variable identifier in reference function argument"
+				)
+			}
+			
+			var_val, var_err := parse_var_expr(vm, state, scope, arg.type, var_id, var.type)
+			if var_err != nil do return {}, var_err
+			
+			type_body, type_err := get_type(vm, arg.type)
+			if type_err != nil {
+				return {}, parser_error_emit(
+					vm, state, .Unknown_Type,
+					"Unable to determine type of function argument"
+				)
+			}
+			
+			expr.body = AST_MemoryAddress {
+				var  = var_id,
+				addr = var_val.off,
+				size = type_body.size
+			}
+		}
+		
+		// TODO: think about adding optional constant
+		//		 arguments, where it expects a valid
+		//		 parse-time solved value
+		
+		// STAGE 1: Loop or break
+		token, text, token_err := get_next_token(vm, state)
+		if token_err != nil do return {}, token_err
+		
+		if !parse_expectations(token, expectation_paren_or_comma) {
+			return {}, parser_error_emit(
+				vm, state, .Token_Unexpected,
+				"Expected \")\" or \",\" after argument in function call"
+			)
+		}
+		
+		// Add to args
+		append(&arguments, expr)
+		
+		#partial switch (token.body.(TokenDelimiter) or_else unreachable()).type {
+		case .Comma:
+		case .ParenR:
+		
+			// Reverse single
+			state.token -= 1
+			break parse_loop
+			
+		case: unreachable()
+		}
+		
+		idx += 1
+	}
+	
+	// Check that argument counts match
+	if len(arguments) != n_args {
+		return {}, parser_error_emit(
+			vm, state, .Invalid_Argument,
+			"Provided too few arguments in function call"
+		)
+		
+		// NOTE: it should be impossible to have too
+		//		 many arguments and reach this point,
+		//		 thus the error message
+	}
+	
+	// STAGE 2: Expect ")"
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenR },
+		"Expected \")\" to end function call"
+	) { return {}, .Token_Unexpected }
+	
+	// Check scope rawness
+	if func.raw && !ast_scope_is_raw(scope) {
+		return {}, parser_error_emit(
+			vm, state, .Disallowed,
+			"You can call raw functions only inside raw scopes"
+		)
+	}
+	
+	// Finished, generate AST
+	alloc, alloc_err := vm_get_ast_allocator(vm)
+	if alloc_err != nil do return {}, alloc_err
+	
+	call.args = slice.clone(arguments[:], alloc)
+	call.fn = fn
+	
+	return
 }
 
 // --- Utils ---

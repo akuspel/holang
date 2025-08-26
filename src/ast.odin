@@ -87,6 +87,12 @@ AST_ExpressionValue :: union {
 	
 	AST_DerefExpr,
 	AST_AsPtrExpr,
+	
+	AST_CallExpr,
+}
+
+AST_CallExpr :: struct {
+	using _ : AST_FunctionCall,
 }
 
 AST_CastExpr :: struct {
@@ -142,6 +148,7 @@ AST_Body :: union {
 	AST_For,
 	
 	// Commands
+	AST_FunctionCall,
 	AST_Assign,
 	AST_DerefAssign,
 	
@@ -203,6 +210,11 @@ AST_Empty :: AST_Scope(
 )
 
 // --  Commands  --
+AST_FunctionCall :: struct {
+	fn   : FunctionID,
+	args : []EXPR,
+}
+
 AST_Assign :: struct {
 	
 	op : Operator,
@@ -389,6 +401,11 @@ ast_print_node :: proc(vm : VM, node : NODE) {
 	fmt.printf("AST ")
 	
 	switch &b in node.body {
+	case AST_FunctionCall:
+		f, _ := get_function(vm, b.fn)
+		t, _ := get_type(vm, f.return_val.?.type)
+		fmt.println("Call", f.name, "(", len(f.arguments), "args ) ->", t.name if f.does_return else "NULL")
+		
 	case AST_Assign:
 		v, _ := ast_get_variable(node.scope, b.var)
 		t, _ := get_type(vm, b.type)
