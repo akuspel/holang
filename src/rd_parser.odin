@@ -227,6 +227,8 @@ parse_file_scope :: proc(vm : VM, state : ^ParseState) -> (err : Error) {
 				vm, state, TokenDelimiter { type = .CurlyL },
 				"Expected \"{\" after entry keyword"
 			) { return .Token_Unexpected }
+			state.scope.type = .Block
+			defer state.scope.type = .File
 		
 			// Commands can only be placed in entry when in file scope
 			parser_dumbo_emit("Parsing Entry logic!")
@@ -250,8 +252,24 @@ parse_file_scope :: proc(vm : VM, state : ^ParseState) -> (err : Error) {
 	return
 }
 
-parse_scope :: proc(vm : VM, state : ^ParseState, scope : FRAME, raw : bool) -> (new_scope : FRAME, err : Error) {
+parse_scope :: proc(
+	vm : VM, state : ^ParseState, scope : FRAME,
+	raw : bool, fn : ^Function = nil
+) -> (new_scope : FRAME, err : Error) {
 	
+	// Scope type behaviour
+	switch state.scope.type {
+	case .File:
+		panic("File scope should never enter here")
+	
+	case .Block:
+		assert(fn == nil, "Function should be nil")
+	
+	case .Function:
+		assert(fn != nil, "Function shouldn't be nil")
+	}
+	
+	// Handle scope
 	new_scope, err = ast_allocate_frame(vm, state, scope)
 	if err != nil do return
 	new_scope.raw = raw
@@ -264,7 +282,7 @@ parse_scope :: proc(vm : VM, state : ^ParseState, scope : FRAME, raw : bool) -> 
 	
 	parse_loop: for ;; {
 		
-		end, parse_err := parse_scope_element(vm, state, new_scope)
+		end, parse_err := parse_scope_element(vm, state, new_scope, fn)
 		
 		if parse_err != nil do parse_err = parse_util_skip_until_terminator(vm, state, parse_err)
 		if parse_err == .EOF {
@@ -280,7 +298,7 @@ parse_scope :: proc(vm : VM, state : ^ParseState, scope : FRAME, raw : bool) -> 
 	
 	// --- Internal Procedures ---
 	parse_scope_element :: proc(
-		vm : VM, state : ^ParseState, scope : FRAME
+		vm : VM, state : ^ParseState, scope : FRAME, fn : ^Function
 	) -> (end : bool, err : Error) {
 		token, text, token_err := get_next_token(vm, state)
 		if token_err != nil do return false, token_err
@@ -344,7 +362,7 @@ parse_scope :: proc(vm : VM, state : ^ParseState, scope : FRAME, raw : bool) -> 
 				) { return false, .Token_Unexpected }
 				
 				// New raw scope
-				new_scope, scope_err := parse_scope(vm, state, scope, true)
+				new_scope, scope_err := parse_scope(vm, state, scope, true, fn)
 				if scope_err != nil do return false, scope_err
 				
 				node, node_err := ast_allocate_node(vm, state, scope)
@@ -412,7 +430,7 @@ parse_scope :: proc(vm : VM, state : ^ParseState, scope : FRAME, raw : bool) -> 
 			case .CurlyL:
 			
 				// New scope
-				new_scope, scope_err := parse_scope(vm, state, scope, false)
+				new_scope, scope_err := parse_scope(vm, state, scope, false, fn)
 				if scope_err != nil do return false, scope_err
 				
 				node, node_err := ast_allocate_node(vm, state, scope)
@@ -3125,10 +3143,13 @@ parse_function :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Er
 		"Expected block beginning after function body declaration"
 	) { return .Token_Unexpected }
 	
+	// Update state scope
+	state.scope.type = .Function
+	defer state.scope.type = .File
 	// Parse block
 	// TODO: handle mandatory return statements
 	//		 and function specific semantics
-	_, scope_err := parse_scope(vm, state, &fn.ast_root, fn.raw)
+	_, scope_err := parse_scope(vm, state, &fn.ast_root, fn.raw, &fn)
 	if scope_err != nil do return scope_err
 	
 	fmt.println("Function", fn.name, fn.arguments, "->", fn.returns)
