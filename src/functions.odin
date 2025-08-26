@@ -11,6 +11,7 @@ FunctionID :: distinct int
 Function :: struct {
 	
 	name : string,
+	raw  : bool,
 	
 	arguments : []FunctionArgument,
 	returns   : Maybe(FunctionArgument),

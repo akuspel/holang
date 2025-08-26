@@ -81,6 +81,14 @@ expectation_curly_or_comma := Expectation {
 	}
 }
 
+expectation_paren_or_comma := Expectation {
+	positive = {
+		TokenDelimiter {
+			field = { .Comma, .ParenR }
+		}
+	}
+}
+
 expectation_numeric := Expectation {
 	positive = {
 		TokenLiteral {

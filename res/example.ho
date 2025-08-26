@@ -181,9 +181,19 @@ entry {
 // 	return true;
 // }
 
-// fn str_len(s : &string) -> int {
-// 	raw; return s._size;
-// }
+fn str_len(s : &string) -> (x : int) {
+	// NOTE: VARIABLE ID PARSING IS BROKEN!!!
+	//		 LATER DEFINITIONS MAKE IT NOT WORK
+	//		 FOR FUNCTIONS!!!
+	//		 EASY FIX: GLOBALS MUST BE DECLARED BEFORE FNS!
+	//		 (this wont affect stuff declared in entry)
+	
+	raw {
+		// return s._size;
+	}
+	
+	// return;
+}
 
 /*
 // <--- Works Until

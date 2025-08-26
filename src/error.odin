@@ -102,9 +102,11 @@ ParserError :: enum {
 	Invalid_Type,		// Generated type turned out invalid
 	Invalid_Variable,	// Generated variable is invalid
 
+	Generic_Over,		// Overriding some generic identifier
 	Constant_Over,		// Trying to override existing constant
 	Variable_Over,		// Trying to override existing
 	Type_Over,			// Trying to override existing
+	Function_Over,		// Trying to override existing
 	Type_Mismatch,		// Types don't match
 	
 	Mutating_Immutable,	// Attempting to mutate an immutable variable

@@ -199,6 +199,7 @@ parse_file_scope :: proc(vm : VM, state : ^ParseState) -> (err : Error) {
 		#partial switch kw.type {
 		case .Function:
 			parser_dumbo_emit("Parsing a Function Declaration!")
+			return parse_function(vm, state, &vm.ast_root)
 			
 		case .Variable:
 			parser_dumbo_emit("Parsing a Variable Declaration!")
@@ -3015,6 +3016,399 @@ parse_deref :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Error
 	
 	err = ast_append_node(vm, state, scope, node)
 	return
+}
+
+parse_function :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Error) {
+	
+	fn : Function
+	
+	// Set scope parent
+	fn.ast_root.parent = &vm.ast_root
+	
+	// STAGE 0: Expect raw or identifier
+	token, text, token_err := get_next_token(vm, state)
+	if token_err != nil do return token_err
+	
+	expectation_fn_begin := Expectation {
+		positive = {
+			TokenKeyword {
+				field = { .Raw }
+			},
+			
+			TokenIdentifier {}
+		}
+	}
+	
+	if !parse_expectations(token, expectation_fn_begin) {
+		return parser_error_emit(
+			vm, state, .Token_Unexpected,
+			"Expected \"raw\" keyword or function identifier after fn"
+		)
+	}
+	
+	#partial switch &b in token.body {
+	case TokenKeyword:
+		fn.raw = true
+		
+		// Expect identifier
+		token, text, token_err = get_next_token(vm, state)
+		if token_err != nil do return token_err
+		
+		if !parse_expectations(token, expectation_identifier) {
+			return parser_error_emit(
+				vm, state, .Token_Unexpected,
+				"Expected function identifier after \"raw\" keyword in fn definition"
+			)
+		}
+		
+	case TokenIdentifier:
+	case: unreachable()
+	}
+	
+	// We now have the identifier
+	identifier := text
+	
+	// Check for types
+	if get_identifier_type(vm, identifier) != .Unknown {
+		return parser_error_emit(
+			vm, state, .Function_Over,
+			"Trying to override existing identifier in fn definition"
+		)
+	}
+	
+	if _, _, found := parse_var_id(scope, identifier); found {
+		return parser_error_emit(
+			vm, state, .Function_Over,
+			"Trying to override existing variable identifier in fn definition"
+		)
+	}
+	
+	// Is a valid identifier
+	fn.name = identifier
+	
+	// STAGE 1: Expect "("
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenL },
+		"Expected \"(\" after function name declaration"
+	) { return .Token_Unexpected }
+	
+	// STAGE 2: Parse arguments
+	args, arg_err := parse_function_arguments(vm, state, scope)
+	if arg_err != nil do return arg_err
+	
+	fn.arguments = args
+	
+	// STAGE 3: Expect ")"
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenR },
+		"Expected \")\" to end function arguments"
+	) { return .Token_Unexpected }
+	
+	// STAGE 4: Return statement or begin block
+	ret, ret_err := parse_function_returns(vm, state, scope)
+	
+	// Check return overlap with arguments
+	if ret != nil do for a in args {
+		(a.name == (ret.? or_else unreachable()).name) or_continue
+		
+		return parser_error_emit(
+			vm, state, .Generic_Over,
+			"Return name overshadows function argument"
+		)
+	}
+	
+	fn.returns = ret
+	
+	// STAGE 5: Expect "{"
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .CurlyL },
+		"Expected block beginning after function body declaration"
+	) { return .Token_Unexpected }
+	
+	// Parse block
+	// TODO: handle mandatory return statements
+	//		 and function specific semantics
+	_, scope_err := parse_scope(vm, state, &fn.ast_root, fn.raw)
+	if scope_err != nil do return scope_err
+	
+	fmt.println("Function", fn.name, fn.arguments, "->", fn.returns)
+	
+	return
+	
+	// --- Internal Proceudres ---
+	parse_function_arguments :: proc(
+		vm : VM, state : ^ParseState, scope : FRAME
+	) -> (args : []FunctionArgument, err : Error) {
+		
+		arguments : [dynamic]FunctionArgument
+		defer delete(arguments)
+		
+		parse_loop: for ;; {
+			
+			// STAGE 0: Expect ")" or arg name
+			token, text, token_err := get_next_token(vm, state)
+			if token_err != nil do return nil, token_err
+			
+			expectation_end_or_name := Expectation {
+				positive = {
+					TokenDelimiter {
+						field = { .ParenR },
+					},
+					
+					TokenIdentifier {}
+				}
+			}
+			
+			if !parse_expectations(token, expectation_end_or_name) {
+				return nil, parser_error_emit(
+					vm, state, .Token_Unexpected,
+					"Expected \")\" or valid argument name in function definition"
+				)
+			}
+			
+			#partial switch &b in token.body {
+			case TokenDelimiter: break parse_loop
+			case TokenIdentifier:
+			case: unreachable()
+			}
+			
+			// Check for identifier validity
+			if text == "" || text == "_" {
+				return nil, parser_error_emit(
+					vm, state, .Invalid_Argument,
+					"Expected valid argument name in function definition"
+				)
+			}
+			
+			if get_identifier_type(vm, text) != .Unknown {
+				return nil, parser_error_emit(
+					vm, state, .Generic_Over,
+					"Function argument is overshadowing an existing identifier"
+				)
+			}
+			
+			if _, _, found := parse_var_id(scope, text); found {
+				return nil, parser_error_emit(
+					vm, state, .Variable_Over,
+					"Function argument is overshadowing an existing variable"
+				)
+			}
+			
+			// Check previous arguments
+			for a in arguments {
+				(text == a.name) or_continue
+				
+				return nil, parser_error_emit(
+					vm, state, .Generic_Over,
+					"Argument is overshadowing another argument in the function declaration"
+				)
+			}
+			
+			// STAGE 1: Expect ":"
+			if !parse_util_single_token(
+				vm, state, TokenOperator { type = .Colon },
+				"Expected \":\" after function argument name"
+			) { return nil, .Token_Unexpected }
+			
+			// STAGE 2: Expect type or "&"
+			
+			as_ref : bool
+			if peek, peek_err := get_token(vm, state.token); peek_err == nil {
+				expectation_ref := Expectation {
+					positive = {
+						TokenOperator {
+							type = .Reference
+						}
+					}
+				}
+				
+				if parse_expectations(peek, expectation_ref) {
+					as_ref = true
+					state.token += 1
+				}
+			}
+			
+			type, type_found := parse_util_type(vm, state, "Expected type name after \":\" in function argument declaration")
+			if !type_found do return nil, .Token_Mismatch
+			
+			append(&arguments, FunctionArgument { name = text, as_ref = as_ref, type = type})
+			
+			// STAGE 3: Loop or end
+			token, text, token_err = get_next_token(vm, state)
+			if token_err != nil do return nil, token_err
+			
+			if !parse_expectations(token, expectation_paren_or_comma) {
+				return nil, parser_error_emit(
+					vm, state, .Token_Unexpected,
+					"Expected \",\" or \")\" after function argument declaration"
+				)
+			}
+			
+			#partial switch (token.body.(TokenDelimiter) or_else {}).type {
+			case .Comma:
+			case .ParenR: break parse_loop
+			
+			case: unreachable()
+			}
+		}
+		
+		// Reverse single
+		state.token -= 1
+		
+		// NOTE: just returning alloc errors without
+		//		 asserting or emitting a message can
+		//		 end with invisible failures,  which
+		//		 carry further and are hard to track!
+		if len(arguments) > 0 {
+			alloc, alloc_err := vm_get_type_allocator(vm)
+			if alloc_err != nil do return nil, alloc_err
+			
+			args, err = slice.clone(arguments[:], alloc)
+		}
+		
+		return
+	}
+	
+	parse_function_returns :: proc(
+		vm : VM, state : ^ParseState, scope : FRAME
+	) -> (ret : Maybe(FunctionArgument), err : Error) {
+		
+		// STAGE 0: YES OR NO???
+		token, text, token_err := get_next_token(vm, state)
+		if token_err != nil do return nil, token_err
+		
+		expectation_none_or_ret := Expectation {
+			positive = {
+				TokenOperator {
+					field = { .Return }
+				},
+				
+				TokenDelimiter {
+					field = { .CurlyR }
+				}
+			}
+		}
+		
+		if !parse_expectations(token, expectation_none_or_ret) {
+			return nil, parser_error_emit(
+				vm, state, .Token_Unexpected,
+				"Expected type return statement or block beginning after function declaration"
+			)
+		}
+		
+		#partial switch &b in token.body {
+		case TokenOperator:
+		case TokenDelimiter:
+			
+			// No return defined
+			// Reverse single
+			state.token -= 1
+			return
+			
+		case: unreachable()
+		}
+		
+		// STAGE 1: Type or named return
+		token, text, token_err = get_next_token(vm, state)
+		if token_err != nil do return nil, token_err
+		
+		expectation_ident_or_paren := Expectation {
+			positive = {
+				TokenDelimiter {
+					field = { .ParenL }
+				},
+				
+				TokenIdentifier {}
+			}
+		}
+		
+		if !parse_expectations(token, expectation_ident_or_paren) {
+			return nil, parser_error_emit(
+				vm, state, .Token_Unexpected,
+				"Expected type identifier or \"(\" after function return operator"
+			)
+		}
+		
+		#partial switch &b in token.body {
+		case TokenDelimiter:
+		case TokenIdentifier:
+			// Check for type
+			
+			type, type_err := get_type_id_by_name(vm, text)
+			if type_err != nil {
+				return nil, parser_error_emit(
+					vm, state, .Invalid_Type,
+					"Unable to determine return type from given identifier in function return declaration"
+				)
+			}
+			
+			ret = FunctionArgument {
+				type = get_base_type(vm, type, false),
+			}
+			
+			return
+			
+		case: unreachable()
+		}
+		
+		// STAGE 2: Expect return identifier
+		token, text, token_err = get_next_token(vm, state)
+		if token_err != nil do return nil, token_err
+		
+		if !parse_expectations(token, expectation_identifier) {
+			return nil, parser_error_emit(
+				vm, state, .Token_Unexpected,
+				"Expected valid return variable name in named return declaration"
+			)
+		}
+		
+		if text == "" || text == "_" {
+			return nil, parser_error_emit(
+				vm, state, .Invalid_Name,
+				"Expected valid return variable identifier"
+			)
+		}
+		
+		if get_identifier_type(vm, text) != .Unknown {
+			return nil, parser_error_emit(
+				vm, state, .Generic_Over,
+				"Return identifier is overshadowing an existing identifier"
+			)
+		}
+		
+		if _, _, var_found := parse_var_id(scope, text); var_found {
+			return nil, parser_error_emit(
+				vm, state, .Variable_Over,
+				"Return identifier is overshadowing an existing variable"
+			)
+		}
+		
+		identifier := text
+		// NOTE: the return must be checked in the caller
+		//		 so the return name doesn't overlap args
+		
+		// STAGE 3: Expect ":"
+		if !parse_util_single_token(
+			vm, state, TokenOperator { type = .Colon },
+			"Expected \":\" after named return identifier"
+		) { return nil, .Token_Unexpected }
+		
+		// STAGE 4: Expect type name
+		type, type_found := parse_util_type(vm, state, "Expected return type in function return declaration")
+		if !type_found do return nil, .Token_Unexpected
+		
+		// STAGE 5: Expect ")"
+		if !parse_util_single_token(
+			vm, state, TokenDelimiter { type = .ParenR },
+			"Expected \")\" at the end of named return declaration"
+		) { return nil, .Token_Unexpected }
+		
+		// Complete, return
+		return FunctionArgument {
+			name = identifier,
+			type = type,
+		}, nil
+	}
 }
 
 // --- Utils ---
