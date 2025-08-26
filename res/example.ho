@@ -65,7 +65,7 @@ var COLOR_RED : immutable int = 10 + 1;
 	id : ActorID,
 	
 	// Other stuff
-	name : cstring,
+	name   : string,
 	health : uint,
 	
 	// Data
@@ -185,7 +185,7 @@ entry {
 	
 	var my_float : float = 123.4;
 	my_float /= 100 + add_int_float(
-		123, float(int, str_len(my_str))
+		123, float(int, str_len(actors[3].name))
 	);
 }
 

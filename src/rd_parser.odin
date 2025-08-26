@@ -3710,7 +3710,7 @@ parse_function_call :: proc(
 		
 		// STAGE 0: Parse expression
 		expr, expr_err := ast_allocate_expr(vm, state)
-		assert(err == nil, "Unable to allocate expression")
+		assert(expr_err == nil, "Unable to allocate expression")
 		
 		if !arg.as_ref {
 			
