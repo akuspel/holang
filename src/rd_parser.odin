@@ -203,6 +203,21 @@ parse_file_scope :: proc(vm : VM, state : ^ParseState) -> (err : Error) {
 			
 		case .Variable:
 			parser_dumbo_emit("Parsing a Variable Declaration!")
+			// BAND AID FIX
+			if len(vm.functions) > 0 {
+				return parser_error_emit(
+					vm, state, .Disallowed,
+					"All global variables must be defined before functions"
+				)
+			}
+			
+			if state.entry {
+				return parser_error_emit(
+					vm, state, .Disallowed,
+					"All global variables must be defined before the entry"
+				)
+			}
+			
 			return parse_variable(vm, state, &vm.ast_root)
 		
 		case .Constant:
@@ -294,6 +309,18 @@ parse_scope :: proc(
 		if end do break
 	}
 	
+	// Check function returns
+	return_check: if state.scope.type == .Function && state.scope.depth == 1 {
+		(fn.return_val != nil) or_break return_check
+		(!fn.does_return) or_break return_check
+		
+		// No return expression
+		return nil, parser_error_emit(
+			vm, state, .Scope_Incomplete,
+			"Expected a return statement in function"
+		)
+	}
+	
 	return
 	
 	// --- Internal Procedures ---
@@ -310,6 +337,9 @@ parse_scope :: proc(
 						
 						.If,
 						.For,
+						
+						// .Break,
+						// .Continue,
 						
 						.Variable,
 						
@@ -329,11 +359,54 @@ parse_scope :: proc(
 			}
 		}
 		
+		// Modify expectations for functions
+		if state.scope.type == .Function {
+			expectation_scope.positive = {
+				TokenKeyword {
+					field = {
+						
+						.If,
+						.For,
+						
+						.Return,
+						// .Break,
+						// .Continue,
+						
+						.Variable,
+						
+						.Raw,
+						
+						// --- Builtins ---
+						.Deref,
+					}
+				},
+				
+				TokenDelimiter {
+					field = { .CurlyL, .CurlyR }	
+				},
+			}
+		}
+		
 		if !parse_expectations(token, expectation_scope) {
 			return false, parser_error_emit(
 				vm, state, .Token_Unexpected,
 				"Expected function call, variable assignation or definition, logic expression in scope"
 			)
+		}
+		
+		// Check if the function has already returned
+		ret_check: if state.scope.type == .Function {
+			fn.does_return or_break ret_check
+			
+			delim, end_scope := token.body.(TokenDelimiter)
+			end_scope &&= delim.type == .CurlyR
+			
+			if !end_scope {
+				return false, parser_error_emit(
+					vm, state, .Disallowed,
+					"All commands after a function base scope return are unreachable"
+				)
+			}
 		}
 		
 		#partial switch &b in token.body {
@@ -344,6 +417,86 @@ parse_scope :: proc(
 			
 			case .If:
 			case .For:
+			
+			case .Return:
+				
+				expr : EXPR; expr_err : Error
+				if fn.return_val != nil {
+					ret := fn.return_val.? or_else unreachable()
+					
+					if ret.name != "" {
+						// --- Named Return ---
+						
+						// Check if next is semicolon or no
+						peek, peek_err := get_token(vm, state.token)
+						has_expr: if peek_err == nil {
+							delim, _ := peek.body.(TokenDelimiter)
+							if delim.type == .Terminator do break has_expr
+							
+							expr, expr_err = parse_expression(vm, state, scope, ret.type)
+							if expr_err != nil do return false, expr_err
+						}
+						
+						// No value given, get return variable
+						if expr == nil {
+							
+							// Get return variable
+							var_id, var, found := parse_var_id(scope, ret.name)
+							
+							if !found {
+								return false, parser_error_emit(
+									vm, state, .Invalid_Variable,
+									"Unable to determine return variable"
+								)
+							}
+							
+							// Get return type
+							type_body, type_err := get_type(vm, get_base_type(vm, var.type, true))
+							if type_err != nil {
+								return false, parser_error_emit(
+									vm, state, .Unknown_Type,
+									"Unable to determine return variable type"
+								)
+							}
+							
+							expr, expr_err = ast_allocate_expr(vm, state)
+							assert(err == nil, "Unable to allocate expression")
+							
+							expr.body = AST_MemoryAddress {
+								var  = var_id,
+								addr = { single = 0 },
+								size = type_body.size,
+							}
+						}
+						
+						
+					} else {
+						// --- Unnamed Return ---
+						
+						expr, expr_err = parse_expression(vm, state, scope, ret.type)
+						if expr_err != nil do return false, expr_err
+					}
+					
+					if !parse_util_terminator(vm, state) do return false, .Token_Unexpected
+					
+				} else if !parse_util_terminator(vm, state) {
+					return false, .Token_Unexpected
+				}
+				
+				// Function base return
+				if state.scope.depth == 1 {
+					fn.does_return = true
+				}
+				
+				// Assign return node
+				node, node_err := ast_allocate_node(vm, state, scope)
+				if node_err != nil do unreachable()
+				
+				node.body = AST_Return {
+					result = expr
+				}
+				
+				err = ast_append_node(vm, state, scope, node)
 			
 			case .Raw:
 				// NOTE: this setup is most likely not permanent and
@@ -377,6 +530,7 @@ parse_scope :: proc(
 				// Keep the old raw; logic here just in case:
 				// if !parse_util_terminator(vm, state) do return false, .Token_Unexpected
 				// scope.raw = true
+			
 			
 			// --- Builtins ---
 			case .Deref:
@@ -3020,7 +3174,7 @@ parse_deref :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Error
 	
 	// Finished, generate AST
 	node, node_err := ast_allocate_node(vm, state, scope)
-	if node_err != nil do return node_err
+	if node_err != nil do unreachable()
 	
 	node.body = AST_DerefAssign {
 		op = op,
@@ -3135,13 +3289,32 @@ parse_function :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Er
 		)
 	}
 	
-	fn.returns = ret
+	fn.return_val = ret
 	
 	// STAGE 5: Expect "{"
 	if !parse_util_single_token(
 		vm, state, TokenDelimiter { type = .CurlyL },
 		"Expected block beginning after function body declaration"
 	) { return .Token_Unexpected }
+	
+	// Append variables
+	for a in args {
+		append(&scope.variables, Variable {
+			name = a.name,
+			type = a.type,
+			mutable = a.as_ref
+			// References are mutable
+		})
+	}
+	
+	if ret_v, f := ret.?; f && ret_v.name != "" {
+		// Return value has a name
+		append(&scope.variables, Variable {
+			name = ret_v.name,
+			type = ret_v.type,
+			mutable = true,
+		})
+	}
 	
 	// Update state scope
 	state.scope.type = .Function
@@ -3152,7 +3325,15 @@ parse_function :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Er
 	_, scope_err := parse_scope(vm, state, &fn.ast_root, fn.raw, &fn)
 	if scope_err != nil do return scope_err
 	
-	fmt.println("Function", fn.name, fn.arguments, "->", fn.returns)
+	fn_err := register_function(vm, fn)
+	if fn_err != nil {
+		return parser_error_emit(
+			vm, state, fn_err,
+			"Unable to register function"
+		)
+	}
+	
+	fmt.println("Function", fn.name, fn.arguments, "->", fn.return_val)
 	
 	return
 	
@@ -3664,16 +3845,29 @@ parse_peek_expr_first_type :: proc(vm : VM, scope : FRAME, start : TokenID) -> T
  */
 parse_var_id :: proc(scope : FRAME, name : string) -> (id : VarID, var : Variable, found : bool) {
 	
-	if scope.parent != nil do id, var, found = parse_var_id(scope.parent, name)
-	if found do return
-	// defer if found do fmt.println("Variable", name, "found :", id)
-	
-	for v in scope.variables {
+	n_vars  := ast_count_variables(scope)
+	n_scope := len(scope.variables)
+	for i in 1..<n_scope {
+		v := scope.variables[n_scope - i]
+		id = VarID(n_vars - i)
+		
 		if v.name == name do return id, v, true
-		id += 1
 	}
 	
-	return
+	if scope.parent != nil do return parse_var_id(scope.parent, name)
+	return -1, {}, false
+	
+	// NOTE: reverse variable search
+	// if scope.parent != nil do id, var, found = parse_var_id(scope.parent, name)
+	// if found do return
+	// // defer if found do fmt.println("Variable", name, "found :", id)
+	
+	// for v in scope.variables {
+	// 	if v.name == name do return id, v, true
+	// 	id += 1
+	// }
+	
+	// return
 }
 
 /* --- peek_const ---

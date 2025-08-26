@@ -56,6 +56,10 @@ Keyword :: enum {
 	Elif,
 	For,
 	
+	Return,
+	Break,
+	Continue,
+	
 	Constant,
 	Type,
 	Function,

@@ -13,6 +13,10 @@ TOKEN_KEYWORD := [Keyword]string {
 	.Elif = "elif",
 	.For  = "for",
 	
+	.Return     = "return",
+	.Break      = "break",
+	.Continue   = "continue",
+	
 	.Constant	= "#const",
 	.Type		= "#type",
 	.Function	= "fn",

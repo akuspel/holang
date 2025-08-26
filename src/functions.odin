@@ -13,8 +13,9 @@ Function :: struct {
 	name : string,
 	raw  : bool,
 	
-	arguments : []FunctionArgument,
-	returns   : Maybe(FunctionArgument),
+	arguments   : []FunctionArgument,
+	return_val  : Maybe(FunctionArgument),
+	does_return : bool,
 	// NOTE: once I have figured out
 	//		 single return values do
 	//		 consider multi returns

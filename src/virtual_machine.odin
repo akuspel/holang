@@ -334,6 +334,18 @@ register_constant :: proc(vm : VM, const : Constant) -> (err : Error) {
 	return
 }
 
+register_function :: proc(vm : VM, func : Function) -> (err : Error) {
+	if vm == nil do return .No_VM
+	
+	// Check for function redifinitions
+	if get_identifier_type(vm, func.name) != .Unknown do return .Function_Over
+	
+	// Append
+	append(&vm.functions, func)
+	
+	return
+}
+
 // --- Utils ---
 get_identifier_type :: proc(vm : VM, name : string) -> (type : Identifier) {
 	// Named value precedence

@@ -189,10 +189,10 @@ fn str_len(s : &string) -> (x : int) {
 	//		 (this wont affect stuff declared in entry)
 	
 	raw {
-		// return s._size;
+		return s._size;
 	}
 	
-	// return;
+	return;
 }
 
 /*
