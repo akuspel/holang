@@ -40,6 +40,8 @@ main :: proc() {
 	if parse_err != nil do fmt.println(parse_err)
 	
 	vm_destroy(&vm)
+	
+	fmt.println("FINISHED")
 }
 
 

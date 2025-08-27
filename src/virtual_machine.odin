@@ -127,8 +127,7 @@ vm_destroy :: proc(vm : ^VM) -> (err : Error) {
 	
 	// AST
 	ast_clean_frame(&vm^.ast_root)
-	for &f in vm^.functions do ast_clean_frame(&f.ast_root)
-	for  f in vm^.frames    do ast_clean_frame(f)
+	for f in vm^.frames do ast_clean_frame(f)
 	delete(vm^.frames)
 	
 	// Arenas
@@ -156,8 +155,7 @@ vm_reset :: proc(vm : VM) -> (err : Error) {
 	
 	// AST
 	ast_clear_frame(&vm.ast_root)
-	for &f in vm.functions do ast_clear_frame(&f.ast_root)
-	for  f in vm.frames    do ast_clear_frame(f)
+	for f in vm.frames do ast_clear_frame(f)
 	clear(&vm.frames)
 	
 	// Arenas

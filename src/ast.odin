@@ -167,6 +167,9 @@ AST_Body :: union {
 FRAME :: ^AST_Frame
 AST_Frame :: struct {
 	parent    : ^AST_Frame,
+	globals   : int,
+	// Store number of globals
+	// At scope creation
 	
 	variables : [dynamic]Variable,
 	nodes     : [dynamic]NODE,
@@ -283,6 +286,23 @@ ast_allocate_frame :: proc(
 	if alloc_err != nil do return nil, alloc_err
 	
 	frame.parent = scope
+	
+	// NOTE: current idea is to have a count
+	//		 of globals at creation time in
+	//		 each scope, and during runtime
+	//		 compare:
+	//		     if id >= curr:
+	//		         id += curr - creation
+	if scope != nil {
+		if scope.parent == nil {
+			frame.globals = ast_count_variables(scope)
+		} else {
+			frame.globals = scope.globals
+		}
+	} else {
+		frame.globals = 0
+	}
+	
 	append(&vm.frames, frame)
 	
 	return
@@ -439,4 +459,46 @@ ast_clear_frame :: proc(frame : FRAME) {
 ast_clean_frame :: proc(frame : FRAME) {
 	delete(frame.nodes)
 	delete(frame.variables)
+}
+
+@(private)
+ast_parse_var_id :: proc(scope : FRAME, name : string) -> (id : VarID, var : Variable, found : bool) {
+	
+	// n_vars  := ast_count_variables(scope)
+	// n_scope := len(scope.variables)
+	// for i in 1..<n_scope {
+	// 	v := scope.variables[n_scope - i]
+	// 	id = VarID(n_vars - i)
+		
+	// 	if v.name == name do return id, v, true
+	// }
+	
+	// if scope.parent != nil do return parse_var_id(scope.parent, name)
+	// return -1, {}, false
+	
+	// NOTE: reverse variable search
+	if scope.parent != nil do id, var, found = parse_var_id(scope.parent, name)
+	if found do return
+	// defer if found do fmt.println("Variable", name, "found :", id)
+	
+	for v in scope.variables {
+		if v.name == name do return id, v, true
+		id += 1
+	}
+	
+	return
+}
+
+@(private)
+ast_print_vars :: proc(scope : FRAME) {
+	fmt.println(scope)
+	fmt.println("Scope variables:")
+	_print_vars(scope)
+	fmt.println("---\n")
+	
+	// --- Internal Variables ---
+	_print_vars :: proc(scope : FRAME) {
+		if scope.parent != nil do _print_vars(scope.parent)
+		for v in scope.variables do fmt.println(v.name)
+	}
 }

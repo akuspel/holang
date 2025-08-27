@@ -900,7 +900,7 @@ parse_tokens :: proc(
 			
 			switch s.phase {
 			case .Start:
-				exp = expectation_struct_curly
+				exp = expectation_curly
 				succ = parse_expectations(
 					next^, exp
 				)

@@ -111,6 +111,15 @@ StructMember :: struct {
 	base_type : TypeID,
 }
 
+// --- Constants ---
+BYTE_ID  :: 0
+INT_ID   :: 1
+UINT_ID  :: 2
+FLOAT_ID :: 3
+BOOL_ID  :: 4
+
+BYTE_PTR_ID :: 5
+STRING_ID   :: 6
 
 // --- Variables ---
 
@@ -198,15 +207,23 @@ base_types_init :: proc(vm : VM) -> (err : Error) {
 	byte_id, err = register_type(vm, type_byte)
 	if err != nil do return
 	
+	assert(byte_id == BYTE_ID, "Builtin type ID doesn't match expected")
+	
 	int_id, err = register_type(vm, type_int)
 	if err != nil do return
 	uint_id, err = register_type(vm, type_uint)
 	if err != nil do return
 	
+	assert(int_id  ==  INT_ID, "Builtin type ID doesn't match expected")
+	assert(uint_id == UINT_ID, "Builtin type ID doesn't match expected")
+	
 	float_id, err = register_type(vm, type_float)
 	if err != nil do return
 	bool_id, err = register_type(vm, type_bool)
 	if err != nil do return
+	
+	assert(float_id == FLOAT_ID, "Builtin type ID doesn't match expected")
+	assert(bool_id  ==  BOOL_ID, "Builtin type ID doesn't match expected")
 	
 	// --- Custom Base Types ---
 	type_byte_ptr := Type {
@@ -222,6 +239,8 @@ base_types_init :: proc(vm : VM) -> (err : Error) {
 	
 	byte_ptr_id, err = register_type(vm, type_byte_ptr)
 	if err != nil do return
+
+	assert(byte_ptr_id == BYTE_PTR_ID, "Builtin type ID doesn't match expected")
 	
 	type_string := Type {
 		name = "string",
@@ -252,6 +271,8 @@ base_types_init :: proc(vm : VM) -> (err : Error) {
 	
 	string_id, err = register_type(vm, type_string)
 	if err != nil do return
+	
+	assert(string_id == STRING_ID, "Builtin type ID doesn't match expected")
 	
 	return
 }

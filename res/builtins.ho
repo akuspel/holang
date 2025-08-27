@@ -148,3 +148,14 @@ fn substring(str : &string, start : int, end : int) -> string {
 // Does not take into account the validity of
 // UTF8 characters
 
+
+
+if (int, i == x) {
+	
+	for i : int ;
+		i < 10  ;
+		i += 1  {
+		
+	}
+	
+}

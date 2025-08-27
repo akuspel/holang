@@ -117,6 +117,9 @@ fn str_len(s : &string) -> (x : int) {
 
 fn add_int_float(a : int, b : float) -> (c : float) {
 	c = float(int, a) + b;
+	
+	var d : int = a + int(float, b * c);
+	c = 10;
 	return;
 }
 
@@ -148,17 +151,17 @@ entry {
 	x += y*5;
 	
 	var mog : immutable int = 100;
-	var dog : int_ptr = as_ptr(int_ptr, mog);
+	// var dog : int_ptr = as_ptr(int_ptr, mog);
 	
 	// Conditionals
-	// if (a == 1) {
+	if (bool(int, x == 1)) {
 		
-	// 	var z : int;
-	// 	var h : float = 12.3 * 3.2 + 1.0;
-	// } else {
+		var z : int;
+		var h : float = 12.3 * 3.2 + 1.0;
+	} else {
 		
-	// 	if (b == 2) x = 2;
-	// }
+		if (bool(int, y == 2)) x = 2;
+	}
 	
 	var fax_bro : bool;
 	fax_bro = bool(int, x == y);
@@ -166,7 +169,7 @@ entry {
 	
 	var my_str : string;
 	var h : cstring;
-	// var b : byte = 10;
+	var b : byte = 10;
 	raw {
 		// Current scope is raw from here on
 		my_str._data = 10;

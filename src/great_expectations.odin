@@ -55,7 +55,7 @@ expectation_col := Expectation {
 	}
 }
 
-expectation_struct_curly := Expectation {
+expectation_curly := Expectation {
 	positive = {
 		TokenDelimiter {
 			field = { .CurlyL }
