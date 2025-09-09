@@ -12,6 +12,7 @@ TOKEN_KEYWORD := [Keyword]string {
 	.Else = "else",
 	.Elif = "elif",
 	.For  = "for",
+	.In   = "in",
 	
 	.Return     = "return",
 	.Break      = "break",

@@ -823,6 +823,234 @@ parse_if :: proc(
 	return
 }
 
+parse_for :: proc(
+	vm : VM, state : ^ParseState,
+	scope : FRAME, fn : ^Function, nested : bool
+) -> (err : Error) {
+	
+	// Two different for loop types:
+	// Standard
+	//     for (var i : int; bool(int, i < 10); i += 1) { ... }
+	//
+	// Boolean (while)
+	//     for (true) { ... }
+	//
+	// For Each
+	//     for_each (var v in [IntArray, my_int_array]) { ... }
+	
+	// STAGE 0: Expect "("
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenL },
+		"Expected \"(\" after for statement"
+	) { return .Token_Unexpected }
+	
+	// STAGE 1: Parse loop type
+	loop_type : enum {
+		Standard,
+		Boolean,
+		ForEach,
+	}
+	
+	// Get identifier
+	token, text, token_err := get_next_token(vm, state)
+	if token_err != nil do return token_err
+	
+	expectation_for_var := Expectation {
+		positive = {
+			TokenKeyword {
+				field = { .Variable }
+			}
+		}
+	}
+	
+	if !parse_expectations(token, expectation_for_var) {
+		
+		// Must be a boolean expression
+		loop_type = .Boolean
+		
+		// Reverse single
+		state.token -= 1
+	}
+	
+	// STAGE 2: Solve boolean, other type
+	for_body : AST_For
+	
+	if loop_type == .Boolean {
+		
+		// Parse the boolean expression
+		expr, expr_err := parse_expression(vm, state, scope, BOOL_ID)
+		if expr_err != nil do return expr_err
+		
+		for_body.cond = expr
+		
+	} else {
+		
+		// Get identifier
+		token, text, token_err = get_next_token(vm, state)
+		if token_err != nil do return token_err
+		
+		if !parse_expectations(token, expectation_identifier) {
+			return parser_error_emit(
+				vm, state, .Token_Unexpected,
+				"Expected variable identifier after declaration in for loop"
+			)
+		}
+		
+		identifier := text
+		if get_identifier_type(vm, identifier) != .Unknown {
+			return parser_error_emit(
+				vm, state, .Generic_Over,
+				"Variable name overshadows exisiting identifier"
+			)
+		}
+		
+		if _, _, found := parse_var_id(scope, identifier); found {
+			return parser_error_emit(
+				vm, state, .Variable_Over,
+				"Given variable name overshadows existing variable"
+			)
+		}
+		
+		// Figure out, for each or standard loop
+		token, text, token_err = get_next_token(vm, state)
+		if token_err != nil do return token_err
+		
+		expectation_for_type := Expectation {
+			positive = {
+				TokenOperator {
+					field = { .Colon }
+				},
+				
+				TokenKeyword {
+					field = { .In }
+				}
+			}
+		}
+		
+		if !parse_expectations(token, expectation_for_type) {
+			return parser_error_emit(
+				vm, state, .Token_Unexpected,
+				"Expected keyword \"in\" or \":\" after variable identifier in for loop"
+			)
+		}
+		
+		#partial switch &b in token.body {
+		case TokenOperator: loop_type = .Standard
+		case TokenKeyword:  loop_type = .ForEach
+		
+		case: unreachable()
+		}
+	}
+	
+	// Loop base scope
+	new_scope, scope_err := ast_allocate_frame(vm, state, scope)
+	assert(err == nil, "Unable to allocate scope frame")
+	
+	// Final loop type switch
+	switch loop_type {
+	case .Standard:
+		
+	
+	case .ForEach:
+		
+		// Expect "["
+		if !parse_util_single_token(
+			vm, state, TokenDelimiter { type = .SquareL },
+			"Expected \"[\" in for-each expression"
+		) { return .Token_Unexpected }
+		
+		// Expect type or literal
+		token, text, token_err = get_next_token(vm, state)
+		if token_err != nil do return token_err
+		
+		if !parse_expectations(token, expectation_lit_or_ident) {
+			return parser_error_emit(
+				vm, state, .Token_Unexpected,
+				"Expected array type identifier or integer literal"
+			)
+		}
+		
+		base : int // Range start
+		top  : int // Range end
+		type : TypeID
+		foreach_type : enum {
+			Array,
+			Range,
+		}
+		
+		#partial switch &b in token.body {
+		case TokenIdentifier:
+			// Reverse single
+			state.token -= 1
+			
+			// Parse type
+			arr_type, type_found := parse_util_type(vm, state, "Expected valid type identifier in for-each expression")
+			if !type_found do return .Unknown_Type
+			
+			type_base, type_err := get_type(vm, get_base_type(vm, arr_type, true))
+			#partial switch &t in type_base.body {
+			case ArrayBody:
+				top = t.size
+			
+			case:
+				return parser_error_emit(
+					vm, state, .Invalid_Type,
+					"Expected valid array type in for-each expression"
+				)
+			}
+			
+			
+		
+		case TokenLiteral:
+			foreach_type = .Range
+			
+			if val, val_ok := token.value.(int); val_ok {
+				base = val
+			} else {
+				return parser_error_emit(
+					vm, state, .Type_Mismatch,
+					"Expected constant integer in for-each range"
+				)
+			}
+		
+		case: unreachable()
+		}
+		
+		// Expect ","
+		if !parse_util_single_token(
+			vm, state, TokenDelimiter { type = .Comma },
+			"Expected \",\" between range members in for-each expression"
+		) { return .Token_Unexpected }
+		
+		// Expect "]"
+		if !parse_util_single_token(
+			vm, state, TokenDelimiter { type = .SquareR },
+			"Expected \"[\" in for-each expression"
+		) { return .Token_Unexpected }
+		
+		// Append hidden index
+		idx_id := VarID(ast_count_variables(new_scope))
+		append(&new_scope.variables, Variable {
+			name = "", // Unnamed var
+			type = INT_ID,
+			mutable = true,
+		})
+		
+		
+		
+	
+	case .Boolean: // Already handled
+	}
+	
+	// STAGE ???: Expect ")"
+	if !parse_util_single_token(
+		vm, state, TokenDelimiter { type = .ParenR },
+		"Expected \")\" to end for statement"
+	) { return .Token_Unexpected }
+	
+	return
+}
+
 // -   Scoped Operation   -
 parse_variable_op :: proc(
 	vm : VM, state : ^ParseState,

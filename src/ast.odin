@@ -204,6 +204,7 @@ AST_Conditional :: struct {
 AST_For :: AST_Scope(
 	struct {
 		cond : EXPR,
+		node : NODE,
 	}
 )
 

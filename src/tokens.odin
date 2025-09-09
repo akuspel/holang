@@ -55,6 +55,7 @@ Keyword :: enum {
 	Else,
 	Elif,
 	For,
+	In,
 	
 	Return,
 	Break,
