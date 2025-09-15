@@ -94,32 +94,15 @@ entry {
 Thus far completed features:
 - Tokeniser
 - Parser
-	- AST generation
-	- Type definitions
-		- Structs (nested)
-		- Arrays
-		- Pointers
-		- References (unique names for existing type)
-	- Constant definitions
-		- Single value
-		- Constant expressions
-	- Variable definitions
-	- Variable assignation
-	- Runtime / constant expression detection 
-	- Runtime expression to AST
-	- Array / Struct literals
 
 Coming Soon™:
 - Parser
-  	- Logic scopes
-  		- if, else, for
+	- In the future: Switch statements?
 - Interpreter
 	- Simple commands
    	- Execute generated AST
 
 Planned features that will take a while to develop:
-- Functions
-	- Single return first, *possibly* multi return later? (not gonna happen)
 - Importing
 	- Borrowed VM's?
    	- Might end up just as single file
@@ -129,7 +112,7 @@ Planned features that will take a while to develop:
 
 
 ## Syntax
-The syntax of **HoLang** borrows elements from **Odin**, **C**, and the family favourite - **Zig**!
+The syntax of **HoLang** borrows elements from **Odin**, **C**, and **Zig**!
 Example:
 ```go
 /* --- HoLang Example ---

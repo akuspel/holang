@@ -860,7 +860,7 @@ parse_while :: proc(
 	) { return .Token_Unexpected }
 	
 	// STAGE 4: Parse scope
-	new_scope, scope_err := parse_scope(vm, state, scope, false)
+	new_scope, scope_err := parse_scope(vm, state, scope, false, fn)
 	if scope_err != nil do return scope_err
 	
 	// Finished, generate AST
@@ -921,6 +921,13 @@ parse_for :: proc(
 		)
 	}
 	
+	if identifier == "" || identifier == "_" {
+		return parser_error_emit(
+			vm, state, .Invalid_Name,
+			"Expected valid variable name in for expression"
+		)
+	}
+	
 	// STAGE 3: Expect ":", "in" or ","
 	token, text, token_err = get_next_token(vm, state)
 	if token_err != nil do return token_err
@@ -950,12 +957,12 @@ parse_for :: proc(
 	
 	#partial switch &b in token.body {
 	case TokenOperator: // Standard for loop
-		return parse_for_standard(vm, state, scope, identifier)
+		return parse_for_standard(vm, state, scope, fn, identifier)
 	
 	case TokenDelimiter:
 	case TokenKeyword:
 		// Non-indexed foreach
-		return parse_for_each(vm, state, scope, identifier, "")
+		return parse_for_each(vm, state, scope, fn, identifier, "")
 	
 	case: unreachable()
 	}
@@ -987,6 +994,13 @@ parse_for :: proc(
 		)
 	}
 	
+	if index == "" || index == "_" {
+		return parser_error_emit(
+			vm, state, .Invalid_Name,
+			"Expected valid variable name in for expression"
+		)
+	}
+	
 	// STAGE 5: Expect "in"
 	if !parse_util_single_token(
 		vm, state, TokenKeyword { type = .In },
@@ -994,24 +1008,97 @@ parse_for :: proc(
 	) { return .Token_Unexpected }
 	
 	return parse_for_each(
-		vm, state, scope,
+		vm, state, scope, fn,
 		identifier, index
 	)
 	
 	// --- Internal Procedures ---
 	parse_for_standard :: proc(
-		vm  : VM, state : ^ParseState, scope : FRAME,
+		vm  : VM, state : ^ParseState,
+		scope : FRAME, fn : ^Function,
 		var : string
 	) -> (err : Error) {
 		
-		return parser_error_emit(
-			vm, state, .Unimplemented,
-			"Standard for loops are yet to be implemented"
-		)
+		// Make a new scope
+		new_scope, scope_err := ast_allocate_frame(vm, state, scope)
+		if scope_err != nil do unreachable()
+		
+		// STAGE 0: Expect type
+		type_id, type_found := parse_util_type(vm, state, "in for expression")
+		if !type_found do return .Invalid_Type
+		
+		base_type := get_base_type(vm, type_id, false)
+		
+		// Append variable
+		var_id := VarID(ast_count_variables(new_scope))
+		append(&new_scope.variables, Variable {
+			name = var,
+			type = base_type,
+			mutable = true,
+		})
+		
+		// STAGE 1: Expect terminator
+		if !parse_util_terminator(vm, state) do return .Token_Unexpected
+		
+		// STAGE 2: Parse boolean expression
+		expr, expr_err := parse_expression(vm, state, new_scope, BOOL_ID)
+		if expr_err != nil do return expr_err
+		
+		// STAGE 3: Expect terminator
+		if !parse_util_terminator(vm, state) do return .Token_Unexpected
+		
+		// STAGE 4: Parse single scope element
+		end, elem_err := parse_scope_element(vm, state, new_scope, fn)
+		if elem_err != nil do return elem_err
+		
+		if end {
+			return parser_error_emit(
+				vm, state, .Expression_Invalid,
+				"Expected valid statement at the end of for expression"
+			)
+		}
+		
+		// Cleanup
+		assert(len(new_scope.nodes) == 1, "Expected exactly one node")
+		pass_node := new_scope.nodes[0]
+		clear(&new_scope.nodes)
+		
+		// STAGE 5: Expect ")"
+		if !parse_util_single_token(
+			vm, state, TokenDelimiter { type = .ParenR },
+			"Expected \")\" to end for expression"
+		) { return .Token_Unexpected }
+		
+		// STAGE 6: Expect "{"
+		if !parse_util_single_token(
+			vm, state, TokenDelimiter { type = .CurlyL },
+			"Expected \"{\" to begin loop body"
+		) { return .Token_Unexpected }
+		
+		// STAGE 7: Parse scope
+		body_scope, body_err := parse_scope(vm, state, new_scope, false, fn)
+		if body_err != nil do return body_err
+		
+		// Finished, generate AST
+		node, node_err := ast_allocate_node(vm, state, scope)
+		if node_err != nil do unreachable()
+		
+		node.body = AST_For {
+			base = new_scope,
+			body = body_scope,
+			
+			var  = var_id,
+			cond = expr,
+			
+			pass = pass_node
+		}
+		
+		return ast_append_node(vm, state, scope, node)
 	}
 	
 	parse_for_each :: proc(
-		vm : VM, state : ^ParseState, scope : FRAME,
+		vm : VM, state : ^ParseState,
+		scope : FRAME, fn : ^Function,
 		var, idx : string
 	) -> (err : Error) {
 		
@@ -1202,7 +1289,7 @@ parse_for :: proc(
 		) { return .Token_Unexpected }
 		
 		// STAGE 3: Parse scope
-		body_scope, body_err := parse_scope(vm, state, new_scope, false)
+		body_scope, body_err := parse_scope(vm, state, new_scope, false, fn)
 		if body_err != nil do return body_err
 		
 		// Finished, generate AST
@@ -1612,7 +1699,7 @@ parse_for_crazy :: proc(
 		"Expected \"{\" after for statement"
 	) { return .Token_Unexpected }
 	
-	loop_scope, loop_err := parse_scope(vm, state, new_scope, false)
+	loop_scope, loop_err := parse_scope(vm, state, new_scope, false, fn)
 	if loop_err != nil do return loop_err
 	
 	

@@ -132,8 +132,16 @@ entry {
 		xxx = 1;
 	}
 	
-	for (var a : int; a < 10; a += 1;) {
-		// Unimplemented
+	for (
+		var a : int;
+		bool(int, a < 10);
+		{
+			var b : int = a / 2;
+			a += b;
+		}
+	) {
+		
+		// A goddamn crazy for loop or smth
 	}
 	
 	for (var a, i in actors) {
