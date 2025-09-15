@@ -54,6 +54,8 @@ Keyword :: enum {
 	If,
 	Else,
 	Elif,
+	
+	While,
 	For,
 	In,
 	

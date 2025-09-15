@@ -5,6 +5,8 @@ package holang
  * and execution of AST
  */
 
+import "base:intrinsics"
+
 import "core:fmt"
 
 // --- Types ---
@@ -145,7 +147,10 @@ AST_Body :: union {
 	
 	// Scopes
 	AST_Empty,
+	AST_While,
 	AST_For,
+	AST_ForEach,
+	AST_ForRange,
 	
 	// Commands
 	AST_FunctionCall,
@@ -177,7 +182,8 @@ AST_Frame :: struct {
 	raw : bool,	// Ignore opaques
 }
 
-AST_Scope :: struct($B : typeid) {
+AST_Scope :: struct($B : typeid)
+	where intrinsics.type_is_struct(B) {
 	
 	child : FRAME,
 	using _ : B,
@@ -201,12 +207,46 @@ AST_Conditional :: struct {
 
 // Serves as while loop
 // Like in Odin
-AST_For :: AST_Scope(
+AST_While :: AST_Scope(
 	struct {
 		cond : EXPR,
-		node : NODE,
 	}
 )
+
+AST_For :: struct {
+	base : FRAME, // Holds internal variables
+	body : FRAME, // Loop body
+	
+	var  : VarID,	// Iteration variable
+	cond : EXPR,	// Iteration condition
+	pass : NODE,	// Executed after every iteration
+}
+
+AST_ForEach :: struct {
+	base : FRAME,
+	body : FRAME,
+	
+	var  : VarID,
+	idx  : VarID,
+	
+	head : VarID,
+	off  : AST_Offset,
+	
+	to   : int,
+	pass : FRAME
+}
+
+AST_ForRange :: struct {
+	base : FRAME,
+	body : FRAME,
+	
+	var  : VarID,
+	idx  : VarID,
+	
+	from,
+	  to : int,
+	pass : FRAME
+}
 
 // Empty scope
 AST_Empty :: AST_Scope(
@@ -443,7 +483,20 @@ ast_print_node :: proc(vm : VM, node : NODE) {
 	case AST_Continue:	fmt.println("Continue")
 	
 	case AST_Empty:		fmt.println("Scope")
+	case AST_While:		fmt.println("While loop")
 	case AST_For:		fmt.println("For Loop")
+	case AST_ForEach:
+		v, _ := ast_get_variable(b.base, b.var)
+		t, _ := get_type(vm, v.type)
+		
+		f, _ := ast_get_variable(b.base, b.head)
+		
+		fmt.println("For Each", v.name, ":", t.name, "in", f.name)
+		
+	case AST_ForRange:
+		v, _ := ast_get_variable(b.base, b.var)
+		
+		fmt.println("For", v.name, "in [", b.from, ",", b.to, "]")
 	
 	case AST_Conditional:
 		fmt.println("Conditional Expression")

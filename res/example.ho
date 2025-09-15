@@ -126,6 +126,24 @@ fn add_int_float(a : int, b : float) -> (c : float) {
 // Entry statement
 entry {
 	
+	// While loops work
+	while (10 + 1 == 2) {
+		var xxx : int;
+		xxx = 1;
+	}
+	
+	for (var a : int; a < 10; a += 1;) {
+		// Unimplemented
+	}
+	
+	for (var a, i in actors) {
+		a.health = 10 + uint(int, i);
+		
+		for (var h in 0 ..< 10) {
+			// Do something idk
+		}
+	}
+	
 	var my_other_buff : immutable byte_ptr = alloc(byte, 10);
 	
 	// These variables are local to our entry scope
