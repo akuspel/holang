@@ -1104,8 +1104,6 @@ parse_for :: proc(
 			mutable = foreach_type == .Array,
 		})
 		
-		fmt.println(var)
-		
 		switch foreach_type {
 		case .Range:
 			foreach_body : AST_ForRange
@@ -3940,9 +3938,8 @@ parse_variable :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Er
 	}
 	
 	// Check existing variables
-	if 	aa, bb, var_exists := parse_var_id(scope, variable.name);
+	if _, _, var_exists := parse_var_id(scope, variable.name);
 		var_exists {
-		fmt.println(aa, bb)
 		return parser_error_emit(
 			vm, state, .Token_Unexpected,
 			"Variable name overshadows existing variable"
