@@ -973,7 +973,7 @@ parse_for :: proc(
 	}
 	
 	index := text
-	if get_identifier_type(vm, identifier) != .Unknown {
+	if get_identifier_type(vm, index) != .Unknown {
 		return parser_error_emit(
 			vm, state, .Variable_Over,
 			"Given index variable name overrides an existing identifier"
