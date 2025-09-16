@@ -1037,8 +1037,48 @@ parse_for :: proc(
 			mutable = true,
 		})
 		
-		// STAGE 1: Expect terminator
-		if !parse_util_terminator(vm, state) do return .Token_Unexpected
+		// STAGE 1: Expect terminator or "="
+		token, text, token_err := get_next_token(vm, state)
+		if token_err != nil do return token_err
+		
+		expectation_assign_or_end := Expectation {
+			positive = {
+				TokenDelimiter {
+					field = { .Terminator }
+				},
+				
+				TokenOperator {
+					field = { .Equals }
+				}
+			}
+		}
+		
+		if !parse_expectations(token, expectation_assign_or_end) {
+			return parser_error_emit(
+				vm, state, .Token_Unexpected,
+				"Expected \"=\" or \";\" after variable type in for loop expression"
+			)
+		}
+		
+		// Default value
+		def_expr : EXPR
+		def_err  : Error
+		
+		// Assign or no
+		#partial switch &b in token.body {
+		case TokenDelimiter:
+		case TokenOperator:
+		
+			// Assignation
+			// Parse expression
+			def_expr, def_err = parse_expression(vm, state, scope, base_type)
+			if def_err != nil do return def_err
+			
+			// Expect terminator
+			if !parse_util_terminator(vm, state) do return .Token_Unexpected
+			
+		case: unreachable()
+		}
 		
 		// STAGE 2: Parse boolean expression
 		expr, expr_err := parse_expression(vm, state, new_scope, BOOL_ID)
@@ -1062,6 +1102,22 @@ parse_for :: proc(
 		assert(len(new_scope.nodes) == 1, "Expected exactly one node")
 		pass_node := new_scope.nodes[0]
 		clear(&new_scope.nodes)
+		
+		// Assign default value
+		if def_expr != nil {
+			node, node_err := ast_allocate_node(vm, state, new_scope)
+			if node_err != nil do unreachable()
+			
+			node.body = AST_Assign {
+				op   = .Equals,
+				var  = var_id,
+				type = base_type,
+				expr = def_expr,
+			}
+			
+			err = ast_append_node(vm, state, new_scope, node)
+			if err != nil do return
+		}
 		
 		// STAGE 5: Expect ")"
 		if !parse_util_single_token(
