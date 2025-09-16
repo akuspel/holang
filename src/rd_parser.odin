@@ -689,6 +689,12 @@ parse_if :: proc(
 		
 		// Must be a single statement
 		end, scope_err := parse_scope_element(vm, state, &new_scope, fn)
+		
+		// NOTE: THIS IS A HORRIBLE FIX!
+		// MARK FN AS NOT RETURNING AFTER A SINGLE LINE CONDITIONAL
+		// TO STOP ERROR WHERE IT THINKS PARTS CAN'T BE REACHED
+		fn.does_return = false
+		
 		if scope_err != nil do return scope_err
 		if end {
 			return parser_error_emit(
@@ -1621,7 +1627,7 @@ parse_variable_op :: proc(
 			}
 			
 			// STAGE 1: Expect index
-			expr, expr_err := parse_expression(vm, state, scope, -1)
+			expr, expr_err := parse_expression(vm, state, scope, INT_ID)
 			if expr_err != nil do return expr_err
 			single_offset := mem.align_forward_int(b.size, b.align)
 			
@@ -2428,7 +2434,7 @@ parse_var_expr :: proc(
 			}
 			
 			// STAGE 1: Expect index
-			expr, expr_err := parse_expression(vm, state, scope, -1)
+			expr, expr_err := parse_expression(vm, state, scope, INT_ID)
 			if expr_err != nil do return {}, expr_err
 			single_offset := mem.align_forward_int(b.size, b.align)
 			
@@ -3373,6 +3379,45 @@ parse_type :: proc(vm : VM, state : ^ParseState) -> (err : Error) {
 	case TokenKeyword:
 		// Either a struct or a unique reference
 		#partial switch b.type {
+		case .Opaque:
+			type.obfuscate = true
+			
+			// Must be a struct or array
+			token, text, token_err = get_next_token(vm, state)
+			if token_err != nil do return token_err
+			
+			expectation_struct_or_array := Expectation {
+				positive = {
+					TokenDelimiter {
+						field = { .SquareL }
+					},
+					
+					TokenKeyword {
+						field = { .Struct }
+					}
+				}
+			}
+			
+			if !parse_expectations(token, expectation_struct_or_array) {
+				return parser_error_emit(
+					vm, state, .Token_Unexpected,
+					"Expected struct or array body after keyword \"opaque\" in type definition"
+				)
+			}
+			
+			// Parse types
+			#partial switch &b in token.body {
+			case TokenKeyword:
+				// Must be a struct
+				err = parse_struct_type(vm, state, &type, temp_alloc)
+			
+			case TokenDelimiter:
+				// Must be an array
+				err = parse_array_type(vm, state, &type)
+			
+			case: unreachable()
+			}
+			
 		case .Struct:
 			err = parse_struct_type(vm, state, &type, temp_alloc)
 		
@@ -4382,7 +4427,7 @@ parse_function :: proc(vm : VM, state : ^ParseState, scope : FRAME) -> (err : Er
 				},
 				
 				TokenDelimiter {
-					field = { .CurlyR }
+					field = { .CurlyL }
 				}
 			}
 		}

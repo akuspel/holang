@@ -161,7 +161,7 @@ expectation_variable_typedef := Expectation {
 	
 	positive = {
 		TokenKeyword {
-			field = { .Struct, .Unique }
+			field = { .Struct, .Unique, .Opaque }
 		},
 		
 		TokenDelimiter {

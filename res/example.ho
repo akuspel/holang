@@ -1,33 +1,20 @@
-
-#const MY_STRING_LIT = "This
-is a string literal!
-
-
-\n also: \" haha quotes \"";
 /* --- HoLang Example ---
  * an example of valid HoLang code
  * 
  *	  --- NOTE ---
  * the code currently passes*
  * the	Parsing step up 'till
- * // <--- Works Until
+ * // <-- Works Until
  * !!! unless marked with !!!
- * // <--- Doesn't work
+ * // <-- Doesn't work
  * 
  * (* this doesn't mean it does anything,
  *	only that the Parser recognises the
  *	syntax )
  */
 
-var my_buff : immutable byte_ptr =
-	alloc(byte, 128);
-
 // --- Types ---
 #type u8 = unique byte; // Unique Reference to byte, needs a cast to assign <--->
-#type char = byte;
-
-var my_u8 : u8 = 123;
-var cast_test : byte = char(int, 1.0) + 5 - byte(u8, my_u8);
 
 #type Vec2 = [2]float;
 #type Vec3 = [3]float;
@@ -36,253 +23,127 @@ var cast_test : byte = char(int, 1.0) + 5 - byte(u8, my_u8);
 #type Color = Vec4; // Non-unique reference, no casting needed!
 #type Color255 = [4]u8;
 
-// IDEA: enums, which act like
-//		 constants, but cool
-// #enum MyEnum(int) = {
-// 	ZERO = 0,
-// 	BALLIN = 1,
-// 	MOVING = 2,
-// 	FLIPPN = 3,
-// };
-
-// Colors
-var COLOR_RED : immutable int = 10 + 1;
-
 #const STRING_BUF_SIZE = 1024;
-#type StringBuf = [STRING_BUF_SIZE + 1]byte;
+#type StringBuf = opaque [STRING_BUF_SIZE + 1]byte; // Extra for null character
 #type cstring = ^byte; // Null terminated string
 
-#const MAX_ACTORS = 100;
-#type ActorID = struct {
-	idx : int,
-	gen : int,
+// --- Struct Stuff ---
+#type Vertex = struct {
+	pos : Vec3,
+	col : Color,
 };
-#type Actor = struct {
-	// Nested Structs
-	// NOTE: the struct type
-	//	   must be defined
-	//	   separately
-	id : ActorID,
-	
-	// Other stuff
-	name   : string,
-	health : uint,
-	
-	// Data
-	flags : u8,
-	_ : u8, // Unnamed members, for alignment purposes
-	pos : Vec2,
+
+#type Triangle = [3]Vertex;
+#const MAX_TRIANGLES = 2048;
+#type TriangleBuff = [MAX_TRIANGLES]Triangle;
+
+// Opaque types (array, struct) members
+// Can only be accessed in raw scopes
+#type Mesh = opaque struct {
 	col : Color,
 	
-	// Horrible idea: Methods!
-	// fn damage <self> (val : uint) {
-	// 	self.health -= val;
-	
+	n_tris : int,
+	tris : TriangleBuff,
 };
 
-// Other method declaration
-// fn set_name <self : Actor> (name : cstring) {
-// 	self.name = name;
-// }
+// --- Global Variables ---
+var my_global : int; // Defaults to zero
+var MY_FAKE_CONSTANT : immutable uint = 75;
 
-// --- Variables ---
-#type ActorArray = [MAX_ACTORS]Actor;
-var actors : ActorArray;
-var string_data : StringBuf;
-
-var num_actors : uint;
-#const skibidiasa = -3 + 5;
-var skibidi_b : int =  0 - 1 + 3;
-var skibidi_a : int = -1 + 3;
-
-
-#const AAA = -(1 + 3);
-#type Zing = int;
-
-#type int_ptr = ^int;
-
-fn str_len(s : &string) -> (x : int) {
-	// NOTE: VARIABLE ID PARSING IS BROKEN!!!
-	//		 LATER DEFINITIONS MAKE IT NOT WORK
-	//		 FOR FUNCTIONS!!!
-	//		 EASY FIX: GLOBALS MUST BE DECLARED BEFORE FNS!
-	//		 (this wont affect stuff declared in entry)
-	
-	raw {
-		return s._size;
-	}
-	
-	return;
-}
-
-fn add_int_float(a : int, b : float) -> (c : float) {
-	c = float(int, a) + b;
-	
-	var d : int = a + int(float, b * c);
-	c = 10;
-	return;
-}
-
-// Entry statement
-entry {
-	
-	// While loops work
-	while (10 + 1 == 2) {
-		var xxx : int;
-		xxx = 1;
-	}
-	
-	for (
-		var a : int = 2;
-		bool(int, a < 10);
-		{
-			var b : int = a / 2;
-			a += b;
-		}
-	) {
-		
-		// A goddamn crazy for loop or smth
-	}
-	
-	for (var a, i in actors) {
-		a.health = 10 + uint(int, i);
-		
-		for (var h in 0 ..< 10) {
-			// Do something idk
-		}
-	}
-	
-	var my_other_buff : immutable byte_ptr = alloc(byte, 10);
-	
-	// These variables are local to our entry scope
-	// And can't be called from functions
-	var x : int;
-	var y : immutable Zing = int(uint, 12 - 3 + uint(int, x));
-	
-	x = (y + 1);
-	// y = x; // Throws an error
-	
-	actors[10 + AAA].id = ActorID {
-		idx = 10 + (actors[12 - AAA].id.idx * 3),
-		gen = 3 * y,
-	};
-	
-	var my_vec : Vec4 = Vec4 {
-		1, 2, 3 * (5.1 + float(int, x)), 4
-	};
-	
-	my_vec = { 0, 0, 0, 1 };
-	var my_other_vec : Vec4 = actors[x + y].col;
-	
-	x += y*5;
-	
-	var mog : immutable int = 100;
-	// var dog : int_ptr = as_ptr(int_ptr, mog);
-	
-	// Conditionals
-	if (bool(int, x == 1)) {
-		
-		var z : int;
-		var h : float = 12.3 * 3.2 + 1.0;
-	} else {
-		
-		if (bool(int, y == 2)) x = 2;
-	}
-	
-	var fax_bro : bool;
-	fax_bro = bool(int, x == y);
-	fax_bro = true && fax_bro;
-	
-	var my_str : string;
-	var h : cstring;
-	var b : byte = 10;
-	raw {
-		// Current scope is raw from here on
-		my_str._data = 10;
-		my_str = {
-			_data = 0,
-			_size = 0,
-		};
-		
-		h = cstring(byte_ptr, my_str._data) + as_ptr(cstring, b);
-		// b = deref(cstring, h) + 100;
-	}
-	
-	raw { deref(cstring, h) = 100; }
-	
-	add_int_float(123, 13);
-	
-	var my_float : float = 123.4;
-	my_float /= 100 + add_int_float(
-		123, float(int, str_len(actors[3].name))
-	);
-}
-
+// Constant expressions are evaluated
+// During the parsing step
+var _a : float = 10.0 - 12 / (MAX_TRIANGLES - 512); // Evaluated during parsing
+var _b : float = (_a + float(uint, MY_FAKE_CONSTANT)) * 2; // Evaluated at runtime
 
 // --- Functions ---
-// fn str_cmp(a : &string, b : &string) -> bool {
-// 	raw; // Allows transparent access
-	
-// 	if (a._size != b._size) return false;
-	
-// 	for (var i : byte_ptr; i < a._size; i += 1) {
-// 		var char_a : byte = deref(byte_ptr, a._data + i);
-// 		var char_b : byte = deref(byte_ptr, b._data + i);
-// 		if (char_a != char_b) return false;
-// 	}
-//	for (var i : int; i < 10; i += 1) { ... } // normal for loop
-//	for (var i in my_array)  { ... } // for each
-//	for (a._size != b._size) { ... } // for true
-// 	return true;
-// }
-
-/*
-// <--- Works Until
-fn new_actor(name : cstring, pos : Vector2, col : Color255) -> Actor {
-	if (name == 0) return; // C-like single command execution
-	if (num_actors >= MAX_ACTORS) return Actor {}
-	
-	// Constant expression conditional
-	// No runtime calculation cost (to be or not to be)
-	when (MAX_ACTORS < 100) {
-		
-		print("This is a thing!"); // Hopefully I do figure out strings...
-	}
-	
-	// There are NO runtime constants
-	// ( #const is limited to file space )
-	// But you can define immutable variables
-	var test : immutable int = 0b0100;
-	
-	actor.name = name;
-	actor.pos  = pos;
-	actor.col = Color {
-		float(col.r) / 256,
-		float(col.g) / 256,
-		float(col.b) / 256,
-		float(col.a) / 256,
-	}; // Array literal
-	
-	// THOUGHT:
-	// Array (and struct) literals
-	// Must have typename included
-	// So the parser can parse the
-	// Literal based on that, and
-	// After parsing typecheck if
-	// Literal and variable type match!
-	// (happy cat noises)
-	
-	id = ActorID {
-		int(num_actors),
-		0,
-	};
-	
-	return // Automatically return named returns
+fn clamp(v : int, min : int, max : int) -> int {
+	if (bool(int, v < min)) return min;
+	if (bool(int, v > max)) return max;
+	return v;
 }
 
-// Automatically get types from function
-var actor, id = new_actor("Homeshift Boy", Vec2 {2, 3.4}, Color255 {10, 200, 30, 255});
-var second_id = new_actor("Other boy", Vec2 {10, 11}, Color255 {1, 2, 3, 4}).id; // Return selection
-print(actor.name);
+fn max(a : int, b : int) -> (c : int) {
+	c = a;
+	if (bool(int, b > a)) c = b;
+	return; // Auto return named returns
+}
 
-// Nice example, say I so myself!
+fn new_mesh(tris : int, col : Color255) -> Mesh {
+	
+	var mesh : Mesh;
+	
+	raw { // Mark scope as raw to edit mesh data
+		mesh.col = {
+			float(u8, col[0]) / 256,
+			float(u8, col[1]) / 256,
+			float(u8, col[2]) / 256,
+			float(u8, col[3]) / 256,
+		};
+		
+		mesh.n_tris = clamp(tris, 0, MAX_TRIANGLES);
+	}
+	
+	return mesh;
+}
+
+fn mesh_add_tri(mesh : &Mesh, tri : Triangle) {
+	raw {
+		if (bool(int, mesh.n_tris >= MAX_TRIANGLES)) return;
+		
+		// References can be mutated
+		mesh.tris[mesh.n_tris] = tri;
+		mesh.n_tris += 1;
+	}
+	
+	// You may be asking:
+	//   " if you have references, (safe btw)
+	//     the hell you need pointers for? "
+	//
+	// And the answer is...
+	// Well, cause I want them!
+	// Also cause we can do beloved
+	// C-style strings with ease (IO)
+}
+
+// Would be called like:
+//     var MY_COLOR : immutable Color255 =
+//         {0, 255, 100, 255};
+//
+//     my_mesh.set_color(MY_COLOR);
+//
+// Semantically identical to:
+//     fn set_color(mesh : &Mesh, col : Color255) { ... }
+//     set_color(my_mesh, MY_COLOR);
+//
+// So, this probably never gets implemented!
+// NOTE: immutable variables can't be passed as references!
+
+// --- Entry Point ---
+// Execution begins from an entry block, where
+// Defined variables are local to that block,
+// And can't be accessed globally
+entry {
+	var x : int = 1;
+	var y : int = 2;
+	var z : int =
+		-(x + y) * 13 + x * 2 + y;
+
+	// <-- Works until
+	// You can write logic in an entry frame
+	while (bool(int, z < x + y)) {
+		z += 1 + max(x, y);
+		if (bool(int, (z / 2) == 0)) {
+			y -= 1;
+		}
+	}
+	
+	clamp(z, y, x);
+	
+	// <--- Works until
+	// If we only want en entry function, we can call
+	// One in an entry block, E.G. entry { main() }
+	var my_mesh : Mesh = new_mesh(100, { 255, 100, 53, 200 });
+	mesh_add_tri(my_mesh, {});
+	// The parser checks that ref members
+	// Are a valid variable of given type
+}

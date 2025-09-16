@@ -127,6 +127,7 @@ entry {
 Thus far completed features:
 - Tokeniser
 - Parser
+	- Certain unimplemented edge cases
 
 Coming Soon™:
 - Parser
@@ -186,8 +187,8 @@ Example:
 };
 
 #type Triangle = [3]Vertex;
-#const MAX_TRINGLES = 2048;
-#type TrianleBuff = [MAX_TRIS]Triangle;
+#const MAX_TRIANGLES = 2048;
+#type TriangleBuff = [MAX_TRIANGLES]Triangle;
 
 // Opaque types (array, struct) members
 // Can only be accessed in raw scopes
@@ -204,10 +205,9 @@ var MY_FAKE_CONSTANT : immutable uint = 75;
 
 // Constant expressions are evaluated
 // During the parsing step
-var a : float = 10.0 - 12 / (MAX_TRIANGLES - 512); // Evaluated during parsing
-var b : float = (a + float(int, MY_FAKE_CONSTANT)) * 2; // Evaluated at runtime
+var _a : float = 10.0 - 12 / (MAX_TRIANGLES - 512); // Evaluated during parsing
+var _b : float = (_a + float(uint, MY_FAKE_CONSTANT)) * 2; // Evaluated at runtime
 
-// <-- Works until
 // --- Functions ---
 fn clamp(v : int, min : int, max : int) -> int {
 	if (bool(int, v < min)) return min;
@@ -258,21 +258,6 @@ fn mesh_add_tri(mesh : &Mesh, tri : Triangle) {
 	// C-style strings with ease (IO)
 }
 
-// Horrible concept that hopefully won't get implemented:
-//     Methods!
-
-// Method parents are automatically a reference
-fn set_color <self : Mesh> (col : Color255) {
-	raw {
-		self.col = {
-			float(u8, col[0]) / 256,
-			float(u8, col[1]) / 256,
-			float(u8, col[2]) / 256,
-			float(u8, col[3]) / 256,
-		};
-	}
-}
-
 // Would be called like:
 //     var MY_COLOR : immutable Color255 =
 //         {0, 255, 100, 255};
@@ -285,7 +270,6 @@ fn set_color <self : Mesh> (col : Color255) {
 //
 // So, this probably never gets implemented!
 // NOTE: immutable variables can't be passed as references!
-//     Works again -->
 
 // --- Entry Point ---
 // Execution begins from an entry block, where
@@ -299,18 +283,19 @@ entry {
 
 	// <-- Works until
 	// You can write logic in an entry frame
-	for (bool(int, z < x + y)) {
+	while (bool(int, z < x + y)) {
 		z += 1 + max(x, y);
-		if (bool(int, mod(z, 2) == 0)) {
+		if (bool(int, (z / 2) == 0)) {
 			y -= 1;
 		}
 	}
 	
-	print(x, y, z, clamp(z, y, x));
-
+	clamp(z, y, x);
+	
+	// <-- Works until
 	// If we only want en entry function, we can call
 	// One in an entry block, E.G. entry { main() }
-	var my_mesh = new_mesh(100, { 255, 100, 53, 200 });
+	var my_mesh : Mesh = new_mesh(100, { 255, 100, 53, 200 });
 	mesh_add_tri(my_mesh, {});
 	// The parser checks that ref members
 	// Are a valid variable of given type
