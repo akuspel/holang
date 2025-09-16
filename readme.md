@@ -281,7 +281,6 @@ entry {
 	var z : int =
 		-(x + y) * 13 + x * 2 + y;
 
-	// <-- Works until
 	// You can write logic in an entry frame
 	while (bool(int, z < x + y)) {
 		z += 1 + max(x, y);
