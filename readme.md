@@ -25,7 +25,7 @@ entry {
 }
 ```
 
-Certain types (arrays, structs) can be marked as opaque, which prevents access to its data without using a raw scope. Furthermore pointers can't be dereferenced or got outside of raw scopes. Example:
+Certain types (arrays, structs) can be marked as opaque, which prevents access to its data without using a raw scope. Furthermore pointers can't be dereferenced or gotten outside of raw scopes. Example:
 ```go
 #type MySecrets = opaque struct {
 	_secret_int : int,
@@ -87,6 +87,39 @@ entry {
 			// True!
 		}
 	}
+}
+```
+
+Functions can also be marked as raw, and as such can't be called outside of raw scopes.
+```go
+
+// The whole function is marked as raw
+fn raw my_raw_fn(p : byte_ptr, x : int) {
+	if (p == 0) return;
+	deref(p + byte_ptr(int, x)) += byte(int, x);
+}
+
+fn my_non_raw_fn(p : byte_ptr) {
+	var len : int = strlen(p);
+	
+	// Call our raw function in a raw scope
+	// This function remains non-raw
+	raw { my_raw_fn(p, len / 2) }
+}
+
+entry {
+	
+	var my_cstring : byte_ptr = "Hello World!";
+	
+	// Calling the function outside of a raw scope will result in an error
+	my_raw_fn(my_cstring, 5);
+	
+	raw { // Works fine in a raw scope
+		my_raw_fn(my_cstring, 6);
+	}
+	
+	// We can call the non-raw function outside of a raw scope
+	my_non_raw_fn(my_cstring);
 }
 ```
 
