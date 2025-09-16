@@ -97,7 +97,9 @@ Thus far completed features:
 
 Coming Soon™:
 - Parser
-	- In the future: Switch statements?
+	- In the future:
+		- Switch statements?
+		- Enums? (Typed or untyped)
 - Interpreter
 	- Simple commands
    	- Execute generated AST
