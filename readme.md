@@ -155,15 +155,10 @@ Example:
  * an example of valid HoLang code
  * 
  *	  --- NOTE ---
- * the code currently passes*
- * the	Parsing step up 'till
- * // <-- Works Until
- * !!! unless marked with !!!
- * // <-- Doesn't work
- * 
- * (* this doesn't mean it does anything,
- *	only that the Parser recognises the
- *	syntax )
+ * the given code currently passes
+ * the parsing step. however, this
+ * does not mean it is able to be
+ * executed as of yet
  */
 
 // --- Types ---
@@ -258,19 +253,6 @@ fn mesh_add_tri(mesh : &Mesh, tri : Triangle) {
 	// C-style strings with ease (IO)
 }
 
-// Would be called like:
-//     var MY_COLOR : immutable Color255 =
-//         {0, 255, 100, 255};
-//
-//     my_mesh.set_color(MY_COLOR);
-//
-// Semantically identical to:
-//     fn set_color(mesh : &Mesh, col : Color255) { ... }
-//     set_color(my_mesh, MY_COLOR);
-//
-// So, this probably never gets implemented!
-// NOTE: immutable variables can't be passed as references!
-
 // --- Entry Point ---
 // Execution begins from an entry block, where
 // Defined variables are local to that block,
@@ -291,7 +273,6 @@ entry {
 	
 	clamp(z, y, x);
 	
-	// <-- Works until
 	// If we only want en entry function, we can call
 	// One in an entry block, E.G. entry { main() }
 	var my_mesh : Mesh = new_mesh(100, { 255, 100, 53, 200 });
