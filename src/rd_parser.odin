@@ -2664,10 +2664,32 @@ parse_array_expr :: proc(
 			}
 			
 		case .Function:
-			return nil, parser_error_emit(
-				vm, state, .Unimplemented,
-				"Function calls in array expressions aren't implemented"
-			)
+			fn_id, id_err := get_func_id_by_name(vm, text)
+			fn, fn_err := get_function(vm, fn_id)
+			
+			if fn_err != nil || id_err != nil {
+				return nil, parser_error_emit(
+					vm, state, .Unknown_Func,
+					"Unable to determine function in array expression"
+				)
+			}
+			
+			if !fn.does_return {
+				return nil, parser_error_emit(
+					vm, state, .Invalid_Type,
+					"Can't assign a function without return value in expression"
+				)
+			}
+			
+			if !types_match(vm, fn.return_val.?.type, type) {
+				return nil, parser_error_emit(
+					vm, state, .Type_Mismatch,
+					"Function return value doesn't match array type"
+				)
+			}
+			
+			arr_val, err = parse_function_call(vm, state, scope, fn_id)
+			if err != nil do return
 		
 		case .Variable,
 			.Unknown:
@@ -2774,7 +2796,10 @@ parse_array_literal_expr :: proc(
 		}
 	}
 	
-	if len(values) != array_body.size {
+	// Check defined values match type
+	// NOTE: empty literals are allowed
+	num_vals := len(values)
+	if num_vals != array_body.size && num_vals != 0 {
 		return {}, parser_error_emit(
 			vm, state, .Invalid_Array_Size,
 			"Array size doesn't match with provided literal size"
@@ -2876,10 +2901,32 @@ parse_struct_expr :: proc(
 			}
 			
 		case .Function:
-			return nil, parser_error_emit(
-				vm, state, .Unimplemented,
-				"Function calls in struct expressions aren't implemented"
-			)
+			fn_id, id_err := get_func_id_by_name(vm, text)
+			fn, fn_err := get_function(vm, fn_id)
+			
+			if fn_err != nil || id_err != nil {
+				return nil, parser_error_emit(
+					vm, state, .Unknown_Func,
+					"Unable to determine function in struct expression"
+				)
+			}
+			
+			if !fn.does_return {
+				return nil, parser_error_emit(
+					vm, state, .Invalid_Type,
+					"Can't assign a function without return value in expression"
+				)
+			}
+			
+			if !types_match(vm, fn.return_val.?.type, type) {
+				return nil, parser_error_emit(
+					vm, state, .Type_Mismatch,
+					"Function return value doesn't match struct type"
+				)
+			}
+			
+			struct_val, err = parse_function_call(vm, state, scope, fn_id)
+			if err != nil do return
 		
 		case .Variable,
 			.Unknown:

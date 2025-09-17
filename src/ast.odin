@@ -44,6 +44,8 @@ AST_ExpressionBody :: union {
 	AST_MemoryAddress,
 	AST_StructLiteral,
 	AST_ArrayLiteral,
+	
+	AST_FunctionCall,
 }
 
 AST_ConstantValue :: struct {
@@ -464,7 +466,7 @@ ast_print_node :: proc(vm : VM, node : NODE) {
 	switch &b in node.body {
 	case AST_FunctionCall:
 		f, _ := get_function(vm, b.fn)
-		t, _ := get_type(vm, f.return_val.?.type)
+		t, _ := get_type(vm, (f.return_val.? or_else {type = -1}).type)
 		fmt.println("Call", f.name, "(", len(f.arguments), "args ) ->", t.name if f.does_return else "NULL")
 		
 	case AST_Assign:

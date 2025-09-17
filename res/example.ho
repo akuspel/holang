@@ -105,19 +105,6 @@ fn mesh_add_tri(mesh : &Mesh, tri : Triangle) {
 	// C-style strings with ease (IO)
 }
 
-// Would be called like:
-//     var MY_COLOR : immutable Color255 =
-//         {0, 255, 100, 255};
-//
-//     my_mesh.set_color(MY_COLOR);
-//
-// Semantically identical to:
-//     fn set_color(mesh : &Mesh, col : Color255) { ... }
-//     set_color(my_mesh, MY_COLOR);
-//
-// So, this probably never gets implemented!
-// NOTE: immutable variables can't be passed as references!
-
 // --- Entry Point ---
 // Execution begins from an entry block, where
 // Defined variables are local to that block,
@@ -128,7 +115,6 @@ entry {
 	var z : int =
 		-(x + y) * 13 + x * 2 + y;
 
-	// <-- Works until
 	// You can write logic in an entry frame
 	while (bool(int, z < x + y)) {
 		z += 1 + max(x, y);
