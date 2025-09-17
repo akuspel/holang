@@ -22,6 +22,11 @@ import "core:strings"
 DUMBO_MESSAGES :: false
 
 // --- Types ---
+Expectation :: struct {
+	positive,
+	negative : []TokenType,
+}
+
 ParseState :: struct {
 	
 	token : TokenID,	// Current token
@@ -32,6 +37,7 @@ ParseState :: struct {
 
 	entry : bool,	// Has entry point been defined
 }
+
 ScopeType :: enum {
 	File, Function, Block
 }
@@ -5059,4 +5065,97 @@ parse_util_skip_until_terminator :: proc(vm : VM, state : ^ParseState, from_err 
 		
 		if parse_expectations(token, expectation_terminator) do return
 	}
+}
+
+// --- Expectations ---
+parse_expectations :: proc(
+	next : Token,
+	expects : Expectation
+) -> bool {
+	
+	// Handle positive cases
+	positive : bool
+	if expects.positive == nil {
+		positive = true
+	} else {
+		
+		for &t in expects.positive {
+			positive ||= expect(next, t, false)
+		}
+	}
+	
+	// Handle negative cases
+	if expects.negative == nil {
+		return positive
+	} else {
+		
+		for &t in expects.negative {
+			negative := expect(next, t, true)
+			if !negative do return false
+		}
+	}
+	
+	return positive
+}
+
+/* --- expect ---
+ * expect the next token to
+ * follow specified pattern
+ *
+ * on not expect anything BUT
+ * NOTE: when using not,
+ *		 you must join expressions with &&,
+ *		 not with || like in normal case
+ */
+expect :: proc(next : Token, type : Maybe(TokenType), not : bool) -> bool {
+	if type == nil do return true // No expectations
+	
+	a, b : typeid
+	any_of : bool
+	switch &b in type.? {
+	case TokenKeyword:		
+		a = typeid_of(type_of(b))
+		any_of = b.field == {}
+	case TokenIdentifier:
+		a = typeid_of(type_of(b))
+		any_of = b.field == {}
+	case TokenOperator:
+		a = typeid_of(type_of(b))
+		any_of = b.field == {}
+	case TokenLiteral:
+		a = typeid_of(type_of(b))
+		any_of = b.field == {}
+	case TokenDelimiter:
+		a = typeid_of(type_of(b))
+		any_of = b.field == {}
+	}
+	
+	switch &t in next.body {
+	case TokenKeyword:		
+		b = typeid_of(type_of(t))
+	case TokenIdentifier:
+		b = typeid_of(type_of(t))
+	case TokenOperator:
+		b = typeid_of(type_of(t))
+	case TokenLiteral:
+		b = typeid_of(type_of(t))
+	case TokenDelimiter:
+		b = typeid_of(type_of(t))
+	}
+	
+	// Continue check if types match
+	match := (a == b)
+	if !match do return not
+	if any_of do return !not
+	
+	t := type.?
+	switch &b in next.body {
+	case TokenKeyword:		 match = b.type in t.(TokenKeyword).field
+	case TokenIdentifier:	 match = b.type in t.(TokenIdentifier).field
+	case TokenOperator: 	 match = b.type in t.(TokenOperator).field
+	case TokenLiteral:		 match = b.type in t.(TokenLiteral).field
+	case TokenDelimiter:	 match = b.type in t.(TokenDelimiter).field
+	}
+	
+	return match != not
 }

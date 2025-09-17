@@ -25,6 +25,12 @@ Expression :: struct {
 	values : []ExprVal,
 }
 
+ConstExprVal :: struct {
+	
+	negative : bool,
+	
+	body : union { Variant, Operator, Delimiter },
+}
 
 ExprVal :: struct {
 	
